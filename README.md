@@ -59,6 +59,7 @@
 
 
 # copy github workflowr
+ ```
  name: Node.js CI
 
 on:
@@ -92,6 +93,7 @@ jobs:
 
    - name: Start application
       run: npm start
+```
 
 <a><img src='https://i.imgur.com/LyHic3i.gif'/></a>
 
