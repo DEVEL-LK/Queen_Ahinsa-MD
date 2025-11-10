@@ -8,7 +8,7 @@
  <img src="https://i.imgur.com/dBaSKWF.gif" height="90" width="100%">
 <h1>.              🌟OFFICIAL🌟.          </h1>
 
-<<a><img src='[https://i.ibb.co/SR76mBh/Pu3-ZYHBS5139.jpg](https://files.catbox.moe/oosy7v.jpg)'/></a>
+<<a><img src='[https://files.catbox.moe/oosy7v.jpg]'/></a>
 </p>
 
 <img src="https://i.imgur.com/dBaSKWF.gif" height="90" width="100%">
