@@ -1,7 +1,7 @@
 {
   "name": "Queen_Ahinsa-MD",
-  "description": "ᴊᴀᴠᴀsᴄʀɪᴘᴛ ᴡʜᴀᴛsᴀᴘᴘ ʙᴏᴛ ᴄʀᴇᴀᴛᴇᴅ ʙʏ Queen_Ahinsa-MD",
-  "logo": "https://i.ibb.co/SR76mBh/Pu3-ZYHBS5139.jpg",
+  "description": "ᴊᴀᴠᴀsᴄʀɪᴘᴛ ᴡʜᴀᴛsᴀᴘᴘ ʙᴏᴛ ᴄʀᴇᴀᴛᴇᴅ ʙʏ 𝚀𝚞𝚎𝚎𝚗_𝙰𝚑𝚒𝚗𝚜𝚊-𝙼𝙳",
+  "logo": "https://files.catbox.moe/oosy7v.jpg",
   "keywords": ["bot"],
   "success_url": "/",
 
@@ -16,7 +16,7 @@
     "MONGODB": {
       "description": "you can use this public mongodb url if you have your personal key So you can use him.",
       "required": true,
-      "value": "mongodb+srv://suhail:suhail@clustere.tuhzpez.mongodb.net/?retryWrites=true&w=majority"
+      "value": "mongodb://mongo:pRUEpCCxeofZlYsVHrNBuAeqsfVjsDvd@hopper.proxy.rlwy.net:21545"
     }
 },
 
