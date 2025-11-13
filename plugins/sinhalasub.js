@@ -1,4 +1,4 @@
-// 🎬 SinhalaSub Plugin - Direct Quality Download (No "Reply 1")
+// 🎬 SinhalaSub Plugin - Fully Fixed, Direct Quality Links, Null-Safe
 const axios = require('axios');
 const NodeCache = require('node-cache');
 const { cmd } = require('../command');
@@ -26,7 +26,7 @@ module.exports = (conn) => {
     filename: __filename
   }, async (client, m, mek, { from, q }) => {
     if (!q) return m.reply(
-      '🎬 *SinhalaSub Search*\n\n📖 Usage: `.sinhalasub <movie name>`\n💡 Example: `.sinhalasub Breaking Bad`'
+      '🎬 *SinhalaSub Search*\n\n📖 Usage: `.sinhalasub <movie name>`\n💡 Example: `.sinhalasub Avengers`'
     );
 
     try {
@@ -42,7 +42,7 @@ module.exports = (conn) => {
       const selected = res.data[0]; // Pick first result directly
       const isTv = selected.type.includes('TV');
       const infoUrl = isTv ? TVSHOW + encodeURIComponent(selected.link) : DETAIL + encodeURIComponent(selected.link);
-      
+
       // 2️⃣ Get details
       const info = (await axios.get(infoUrl)).data;
 
@@ -52,13 +52,13 @@ module.exports = (conn) => {
       if (isTv && info.episodes?.length) {
         const ep = info.episodes[0];
         const epRes = await axios.get(EPISODE + encodeURIComponent(ep.url));
-        downloadLink = epRes.data.download || ep.url;
+        downloadLink = epRes.data?.download || ep.url;
       }
 
-      // 4️⃣ Fetch download sources
+      // 4️⃣ Fetch download sources (null-safe)
       const down = await axios.get(DOWNLOAD + encodeURIComponent(downloadLink));
-      const src = down.data.sources || down.data.download || [];
-      if (!src.length) return m.reply('❌ No download links found.');
+      const src = down.data?.sources || down.data?.download || [];
+      if (!src.length) return m.reply('❌ No download links available for this movie/episode.');
 
       // 5️⃣ Build message grouped by quality
       let cap = `🎬 *${info.title}* Download Links:\n\n`;
@@ -80,7 +80,7 @@ module.exports = (conn) => {
       await conn.sendMessage(from, { react: { text: '⬇️', key: sent.key } });
 
     } catch (err) {
-      console.log(err);
+      console.log('SinhalaSub Error:', err.message);
       m.reply('❌ Error: ' + err.message);
     }
   });
