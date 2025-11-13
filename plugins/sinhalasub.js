@@ -1,4 +1,4 @@
-// 🎬 Cinesubz Movie/TV Command with WhatsApp Document Send
+// 🎬 Cinesubz Movie/TV Command with WhatsApp Document Send + Reply Fix
 const axios = require('axios');
 const { cmd } = require('../command');
 const NodeCache = require('node-cache');
@@ -9,6 +9,9 @@ const API_KEY = '15d9dcfa502789d3290fd69cb2bdbb9ab919fab5969df73b0ee433206c58e05
 const BASE_URL = 'https://foreign-marna-sithaunarathnapromax-9a005c2e.koyeb.app/api/cinesubz';
 
 const cache = new NodeCache({ stdTTL: 120, checkperiod: 240 });
+
+// Pending replies Map
+const pendingReplies = new Map();
 
 cmd({
   pattern: 'cinesubz',
@@ -48,8 +51,8 @@ cmd({
       cache.set(cacheKey, searchData);
     }
 
-    let page = 1;
     const perPage = 20;
+    let page = 1;
     const totalPages = Math.ceil(searchData.length / perPage);
 
     const sendPage = async (p) => {
@@ -68,52 +71,8 @@ cmd({
         caption
       }, { quoted });
 
-      client.ev.on('messages.upsert', async ({ messages }) => {
-        const incoming = messages?.[0];
-        if (!incoming?.message?.conversation) return;
-        const text = incoming.message.conversation.trim();
-
-        if (incoming.message?.contextInfo?.stanzaId === sent.key.id) {
-          const n = parseInt(text);
-          if (isNaN(n)) return;
-          if (n === results.length + 1 && p < totalPages) {
-            await sendPage(p + 1);
-            return;
-          }
-
-          const selected = results[n - 1];
-          if (!selected) {
-            await client.sendMessage(from, { text: '❌ Invalid number.' }, { quoted: incoming });
-            return;
-          }
-
-          // Download API
-          const downloadUrl = `${BASE_URL}/downloadurl?apiKey=${API_KEY}&url=${encodeURIComponent(selected.url)}`;
-          const { data: downloadData } = await axios.get(downloadUrl);
-
-          if (!downloadData || !Array.isArray(downloadData.links) || downloadData.links.length === 0) {
-            await client.sendMessage(from, { text: '❌ No download links.' }, { quoted: incoming });
-            return;
-          }
-
-          // Pick first link (can implement quality select later)
-          const chosen = downloadData.links[0];
-          const sizeInGB = parseSizeToGB(chosen.size || '0');
-
-          if (sizeInGB > 2) {
-            await client.sendMessage(from, {
-              text: `⚠️ File too large for WhatsApp.\nDirect link:\n${chosen.url}`
-            }, { quoted: incoming });
-          } else {
-            await client.sendMessage(from, {
-              document: { url: chosen.url },
-              mimetype: 'video/mp4',
-              fileName: `${selected.title} • ${chosen.quality}.mp4`,
-              caption: `🎬 ${selected.title}\n📥 Quality: ${chosen.quality}\n💾 Size: ${chosen.size}\n\n${BRAND}`
-            }, { quoted: incoming });
-          }
-        }
-      });
+      // Store pending page selection
+      pendingReplies.set(sent.key.id, { type: 'page', results, page });
     };
 
     await sendPage(page);
@@ -123,6 +82,87 @@ cmd({
     await client.sendMessage(from, { text: '❌ Error: ' + (err.message || err) }, { quoted });
   }
 });
+
+// Top-level listener for all replies
+const handleReplies = async ({ messages }) => {
+  const incoming = messages?.[0];
+  if (!incoming?.message?.conversation) return;
+  const textRaw = incoming.message.conversation.trim();
+  const text = parseInt(textRaw.replace(/\D/g, '')); // remove non-digits
+  if (isNaN(text)) return;
+
+  const stanzaId = incoming.message?.contextInfo?.stanzaId;
+  if (!stanzaId) return;
+
+  if (!pendingReplies.has(stanzaId)) return;
+
+  const pending = pendingReplies.get(stanzaId);
+
+  if (pending.type === 'page') {
+    // Page selection
+    const { results, page } = pending;
+    const perPage = 20;
+    const totalPages = Math.ceil(results.length / perPage);
+
+    if (text === results.length + 1 && page < totalPages) {
+      // Next page
+      pendingReplies.delete(stanzaId);
+      const startIndex = page * perPage;
+      const nextResults = results.slice(startIndex, startIndex + perPage);
+      if (nextResults.length > 0) {
+        let caption = `*🍿 Cinesubz Search Results (Page ${page + 1}/${totalPages})*\n\n`;
+        nextResults.forEach((r, i) => {
+          caption += `${i + 1}. ${r.type} 🎬 *${r.title}*\n   📅 ${r.year} • ⭐ ${r.imdb}\n\n`;
+        });
+        if (page + 1 < totalPages) caption += `${nextResults.length + 1}. ➡️ *Next Page*\n\n`;
+        caption += '🪀 _Reply with number to select_\n\n' + BRAND;
+
+        const sent = await client.sendMessage(incoming.key.remoteJid, {
+          image: { url: nextResults[0]?.image },
+          caption
+        }, { quoted: incoming });
+        pendingReplies.set(sent.key.id, { type: 'page', results: nextResults, page: page + 1 });
+      }
+      return;
+    }
+
+    const selected = results[text - 1];
+    if (!selected) {
+      await client.sendMessage(incoming.key.remoteJid, { text: '❌ Invalid number.' }, { quoted: incoming });
+      return;
+    }
+
+    pendingReplies.delete(stanzaId);
+
+    // Fetch download links
+    const downloadUrl = `${BASE_URL}/downloadurl?apiKey=${API_KEY}&url=${encodeURIComponent(selected.url)}`;
+    const { data: downloadData } = await axios.get(downloadUrl);
+
+    if (!downloadData || !Array.isArray(downloadData.links) || downloadData.links.length === 0) {
+      await client.sendMessage(incoming.key.remoteJid, { text: '❌ No download links.' }, { quoted: incoming });
+      return;
+    }
+
+    const chosen = downloadData.links[0];
+    const sizeInGB = parseSizeToGB(chosen.size || '0');
+
+    if (sizeInGB > 2) {
+      await client.sendMessage(incoming.key.remoteJid, {
+        text: `⚠️ File too large for WhatsApp.\nDirect link:\n${chosen.url}`
+      }, { quoted: incoming });
+    } else {
+      await client.sendMessage(incoming.key.remoteJid, {
+        document: { url: chosen.url },
+        mimetype: 'video/mp4',
+        fileName: `${selected.title} • ${chosen.quality}.mp4`,
+        caption: `🎬 ${selected.title}\n📥 Quality: ${chosen.quality}\n💾 Size: ${chosen.size}\n\n${BRAND}`
+      }, { quoted: incoming });
+    }
+
+  }
+};
+
+client.ev.on('messages.upsert', handleReplies);
 
 // Helper: parse human-readable size to GB
 function parseSizeToGB(sizeStr) {
