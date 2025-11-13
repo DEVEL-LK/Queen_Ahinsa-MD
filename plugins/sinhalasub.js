@@ -1,4 +1,4 @@
-// 🎬 SinhalaSub Plugin - Fully Fixed, Direct Quality Links, Null-Safe
+// 🎬 SinhalaSub Plugin - Friendly Version (Links Optional)
 const axios = require('axios');
 const NodeCache = require('node-cache');
 const { cmd } = require('../command');
@@ -21,7 +21,7 @@ module.exports = (conn) => {
     pattern: 'sinhalasub',
     react: '🎬',
     alias: ['cinesubz'],
-    desc: 'Search SinhalaSub Movies or TV Series (Direct Download)',
+    desc: 'Search SinhalaSub Movies or TV Series (Friendly, Direct Links)',
     category: 'movie',
     filename: __filename
   }, async (client, m, mek, { from, q }) => {
@@ -46,38 +46,52 @@ module.exports = (conn) => {
       // 2️⃣ Get details
       const info = (await axios.get(infoUrl)).data;
 
-      let downloadLink = info.download || info.url;
+      // Build basic info caption
+      let cap = `🎬 *${info.title || selected.title}*\n\n`;
+      cap += `📅 Year: ${info.year || 'N/A'}\n⭐ IMDb: ${info.imdb || selected.rating}\n📂 Type: ${isTv ? 'TV Series' : 'Movie'}\n\n`;
 
-      // 3️⃣ If TV, pick first episode automatically
+      if (isTv && info.episodes?.length) {
+        cap += '*📺 First Episode:* ' + info.episodes[0].title + '\n\n';
+      }
+
+      // 3️⃣ Get download link (first episode if TV)
+      let downloadLink = info.download || info.url;
       if (isTv && info.episodes?.length) {
         const ep = info.episodes[0];
         const epRes = await axios.get(EPISODE + encodeURIComponent(ep.url));
         downloadLink = epRes.data?.download || ep.url;
       }
 
-      // 4️⃣ Fetch download sources (null-safe)
-      const down = await axios.get(DOWNLOAD + encodeURIComponent(downloadLink));
-      const src = down.data?.sources || down.data?.download || [];
-      if (!src.length) return m.reply('❌ No download links available for this movie/episode.');
+      // 4️⃣ Fetch download sources safely
+      let src = [];
+      try {
+        const down = await axios.get(DOWNLOAD + encodeURIComponent(downloadLink));
+        src = down.data?.sources || down.data?.download || [];
+      } catch (e) {
+        console.log('Download API error:', e.message);
+      }
 
-      // 5️⃣ Build message grouped by quality
-      let cap = `🎬 *${info.title}* Download Links:\n\n`;
-      ['480p', '720p', '1080p'].forEach(q => {
-        const filtered = src.filter(s => (s.quality || '').includes(q));
-        if (filtered.length) {
-          cap += `*${q}*:\n`;
-          filtered.forEach((s, i) => {
-            cap += `${i + 1}. ${s.size || '?'} • ${s.url || s.direct_download}\n`;
-          });
-          cap += '\n';
-        }
-      });
+      if (src.length) {
+        cap += '⬇️ *Download Links:*\n\n';
+        ['480p', '720p', '1080p'].forEach(q => {
+          const filtered = src.filter(s => (s.quality || '').includes(q));
+          if (filtered.length) {
+            cap += `*${q}*:\n`;
+            filtered.forEach((s, i) => {
+              cap += `${i + 1}. ${s.size || '?'} • ${s.url || s.direct_download}\n`;
+            });
+            cap += '\n';
+          }
+        });
+      } else {
+        cap += '❌ No download links available for this movie/episode.';
+      }
 
       cap += BRAND;
 
-      // 6️⃣ Send message
+      // 5️⃣ Send message with emoji react
       const sent = await conn.sendMessage(from, { text: cap });
-      await conn.sendMessage(from, { react: { text: '⬇️', key: sent.key } });
+      await conn.sendMessage(from, { react: { text: src.length ? '⬇️' : '❌', key: sent.key } });
 
     } catch (err) {
       console.log('SinhalaSub Error:', err.message);
