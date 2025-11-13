@@ -68,83 +68,85 @@ cmd({
   }
 });
 
-// 🟣 Global Listener (handles replies for all users)
-cmd.events.on('message', async (client, m) => {
-  try {
-    const text = m.body?.trim();
-    if (!text || !/^\d+$/.test(text)) return;
+// 🟣 Global Reply Handler
+module.exports = (client) => {
+  client.on('message', async (m) => {
+    try {
+      const text = m.body?.trim();
+      if (!text || !/^\d+$/.test(text)) return;
 
-    const session = replySession.get(m.chat);
-    if (!session || !session.msgId) return;
+      const session = replySession.get(m.chat);
+      if (!session || !session.msgId) return;
 
-    const quoted = m.quoted?.id || m.message?.extendedTextMessage?.contextInfo?.stanzaId;
-    if (!quoted || quoted !== session.msgId) return; // only if reply to bot message
+      const quoted = m.quoted?.id || m.message?.extendedTextMessage?.contextInfo?.stanzaId;
+      if (!quoted || quoted !== session.msgId) return; // only reply to bot message
 
-    const num = parseInt(text);
-    // ---- Step 1: Movie / TV selection ----
-    if (session.step === 'search') {
-      const selected = session.list[num - 1];
-      if (!selected) return m.reply('❌ Invalid number.');
+      const num = parseInt(text);
 
-      const isTv = selected.type.includes('TV');
-      const infoUrl = isTv ? TVSHOW + encodeURIComponent(selected.link) : DETAIL + encodeURIComponent(selected.link);
-      const info = (await axios.get(infoUrl)).data;
+      // ---- Step 1: Movie / TV selection ----
+      if (session.step === 'search') {
+        const selected = session.list[num - 1];
+        if (!selected) return m.reply('❌ Invalid number.');
 
-      let caption = `🎬 *${info.title || selected.title}*\n\n`;
-      caption += `📅 Year: ${info.year || 'N/A'}\n⭐ IMDb: ${info.imdb || selected.rating}\n📂 Type: ${isTv ? 'TV Series' : 'Movie'}\n\n`;
+        const isTv = selected.type.includes('TV');
+        const infoUrl = isTv ? TVSHOW + encodeURIComponent(selected.link) : DETAIL + encodeURIComponent(selected.link);
+        const info = (await axios.get(infoUrl)).data;
 
-      if (isTv && info.episodes?.length) {
-        caption += '*📺 Episodes:*\n';
-        info.episodes.slice(0, 10).forEach((e, i) => {
-          caption += `${i + 1}. ${e.title}\n`;
+        let caption = `🎬 *${info.title || selected.title}*\n\n`;
+        caption += `📅 Year: ${info.year || 'N/A'}\n⭐ IMDb: ${info.imdb || selected.rating}\n📂 Type: ${isTv ? 'TV Series' : 'Movie'}\n\n`;
+
+        if (isTv && info.episodes?.length) {
+          caption += '*📺 Episodes:*\n';
+          info.episodes.slice(0, 10).forEach((e, i) => {
+            caption += `${i + 1}. ${e.title}\n`;
+          });
+          caption += '\n💬 Reply with episode number to get download links.';
+        } else {
+          caption += '💬 Reply "1" to get download links.';
+        }
+
+        const sent = await client.sendMessage(m.chat, {
+          image: { url: info.thumbnail || selected.imageSrc },
+          caption
+        }, { quoted: m });
+
+        replySession.set(m.chat, {
+          step: 'detail',
+          info,
+          isTv,
+          msgId: sent.key.id
         });
-        caption += '\n💬 Reply with episode number to get download links.';
-      } else {
-        caption += '💬 Reply "1" to get download links.';
+        return;
       }
 
-      const sent = await client.sendMessage(m.chat, {
-        image: { url: info.thumbnail || selected.imageSrc },
-        caption
-      }, { quoted: m });
+      // ---- Step 2: Download ----
+      if (session.step === 'detail') {
+        const { info, isTv } = session;
+        let link = info.download || info.url;
 
-      replySession.set(m.chat, {
-        step: 'detail',
-        info,
-        isTv,
-        msgId: sent.key.id
-      });
-      return;
-    }
+        if (isTv) {
+          const ep = info.episodes[num - 1];
+          if (!ep) return m.reply('❌ Invalid episode.');
+          const epRes = await axios.get(EPISODE + encodeURIComponent(ep.url));
+          link = epRes.data.download || ep.url;
+        }
 
-    // ---- Step 2: Download ----
-    if (session.step === 'detail') {
-      const { info, isTv } = session;
-      let link = info.download || info.url;
+        const down = await axios.get(DOWNLOAD + encodeURIComponent(link));
+        const src = down.data.sources || [];
 
-      if (isTv) {
-        const ep = info.episodes[num - 1];
-        if (!ep) return m.reply('❌ Invalid episode.');
-        const epRes = await axios.get(EPISODE + encodeURIComponent(ep.url));
-        link = epRes.data.download || ep.url;
+        if (!src.length) return m.reply('❌ No download links found.');
+
+        let cap3 = `🎬 *${info.title}* Download Links:\n\n`;
+        src.forEach((s, i) => {
+          cap3 += `${i + 1}. ${s.quality || '?'} • ${s.size || '?'}\n${s.direct_download}\n\n`;
+        });
+        cap3 += BRAND;
+
+        await m.reply(cap3);
+        replySession.delete(m.chat);
       }
-
-      const down = await axios.get(DOWNLOAD + encodeURIComponent(link));
-      const src = down.data.sources || [];
-
-      if (!src.length) return m.reply('❌ No download links found.');
-
-      let cap3 = `🎬 *${info.title}* Download Links:\n\n`;
-      src.forEach((s, i) => {
-        cap3 += `${i + 1}. ${s.quality || '?'} • ${s.size || '?'}\n${s.direct_download}\n\n`;
-      });
-      cap3 += BRAND;
-
-      await m.reply(cap3);
-      replySession.delete(m.chat);
+    } catch (err) {
+      console.log('Reply Handler Error →', err.message);
     }
-
-  } catch (err) {
-    console.log('Reply Handler Error →', err.message);
-  }
-});
+  });
+};
