@@ -1,4 +1,4 @@
-// 🎬 SinhalaSub Plugin (Cinesubz API) - Fully Working for Baileys v5
+// 🎬 SinhalaSub Plugin (Cinesubz API) - Fully Fixed for Baileys v5
 // 🧠 Developer: Wasantha X GPT
 
 const axios = require('axios');
@@ -16,7 +16,7 @@ const EPISODE = `${BASE}/episode-details?apiKey=${API_KEY}&url=`;
 const DOWNLOAD = `${BASE}/downloadurl?apiKey=${API_KEY}&url=`;
 
 const cache = new NodeCache({ stdTTL: 120 });
-const replySession = new Map();
+const replySession = new Map(); // Track reply context per chat
 
 module.exports = (conn) => {
 
@@ -149,4 +149,5 @@ module.exports = (conn) => {
       console.log('SinhalaSub Reply Error →', err.message);
     }
   });
+
 };
