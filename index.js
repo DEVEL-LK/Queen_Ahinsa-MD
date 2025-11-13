@@ -84,6 +84,17 @@ if (path.extname(plugin).toLowerCase() == ".js") {
 require("./plugins/" + plugin);
 }
 });
+        
+// ------------------ SinhalaSub (Cinesubz API) attach ------------------
+try {
+    const sinhalasub = require('./plugins/sinhalasub');
+    sinhalasub(conn); // attach the reply listener to WA connection
+    console.log('🎬 SinhalaSub (Cinesubz API) plugin attached ✅');
+} catch (e) {
+    console.error('[PLUGIN ERROR] SinhalaSub plugin →', e);
+}
+// ----------------------------------------------------------------------
+        
 console.log('𝙿𝚕𝚞𝚐𝚒𝚗 𝙸𝚗𝚜𝚝𝚊𝚕𝚕𝚎𝚍 𝚂𝚞𝚌𝚌𝚎𝚜𝚜𝚏𝚞𝚕 ✅')
 console.log('𝚀𝚞𝚎𝚎𝚗_𝙰𝚑𝚒𝚗𝚜𝚊-𝙼𝙳 𝙲𝚘𝚗𝚗𝚎𝚌𝚝 𝚆𝚑𝚊𝚝𝚜𝚊𝚙𝚙 ✅')
 
