@@ -1,4 +1,4 @@
-// 🎬 SinhalaSub Plugin (Cinesubz API) - Fully Fixed for Baileys v5
+// 🎬 SinhalaSub Plugin (Advanced) - React & Multi-Quality Download
 // 🧠 Developer: Wasantha X GPT
 
 const axios = require('axios');
@@ -16,7 +16,7 @@ const EPISODE = `${BASE}/episode-details?apiKey=${API_KEY}&url=`;
 const DOWNLOAD = `${BASE}/downloadurl?apiKey=${API_KEY}&url=`;
 
 const cache = new NodeCache({ stdTTL: 120 });
-const replySession = new Map(); // Track reply context per chat
+const replySession = new Map();
 
 module.exports = (conn) => {
 
@@ -76,7 +76,7 @@ module.exports = (conn) => {
       if (!session || !session.msgId) return;
 
       const quotedId = mek.message.extendedTextMessage?.contextInfo?.stanzaId;
-      if (!quotedId || quotedId !== session.msgId) return; // only reply to bot message
+      if (!quotedId || quotedId !== session.msgId) return;
 
       const text = mek.message.conversation || mek.message.extendedTextMessage?.text;
       if (!text || !/^\d+$/.test(text)) return;
@@ -110,6 +110,9 @@ module.exports = (conn) => {
           caption
         }, { quoted: mek });
 
+        // React to the user's reply
+        await conn.sendMessage(from, { react: { text: '🔎', key: sent.key } });
+
         replySession.set(from, {
           step: 'detail',
           info,
@@ -136,13 +139,25 @@ module.exports = (conn) => {
         if (!src.length) return conn.sendMessage(from, { text: '❌ No download links found.' });
 
         let cap3 = `🎬 *${info.title}* Download Links:\n\n`;
-        src.forEach((s, i) => {
-          cap3 += `${i + 1}. ${s.quality || '?'} • ${s.size || '?'}\n${s.direct_download}\n\n`;
+        const qualities = ['480p', '720p', '1080p'];
+
+        qualities.forEach(q => {
+          const filtered = src.filter(s => (s.quality || '').includes(q));
+          if (filtered.length) {
+            cap3 += `*${q}*:\n`;
+            filtered.forEach((s, i) => {
+              cap3 += `${i + 1}. ${s.size || '?'} • ${s.direct_download}\n`;
+            });
+            cap3 += '\n';
+          }
         });
+
         cap3 += BRAND;
 
         await conn.sendMessage(from, { text: cap3 });
-        replySession.delete(from); // clear session
+        // React with download emoji
+        await conn.sendMessage(from, { react: { text: '⬇️', key: mek.key } });
+        replySession.delete(from);
       }
 
     } catch (err) {
