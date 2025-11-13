@@ -1,4 +1,4 @@
-// 🎬 SinhalaSub Plugin (Cinesubz API) - Final Fixed Version
+// 🎬 SinhalaSub Plugin (Cinesubz API) - Fully Fixed
 // 🧠 Developer: Wasantha X GPT
 
 const axios = require('axios');
@@ -92,7 +92,7 @@ module.exports = (conn) => {
       const session = replySession.get(from);
       if (!session || !session.msgId) return;
 
-      // 🔹 Fix: Baileys v5 reply detection
+      // 🔹 Baileys v5 reply detection fix
       const quotedId = mek.message.extendedTextMessage?.contextInfo?.stanzaId
                      || mek.message.extendedTextMessage?.contextInfo?.id
                      || mek.key.id;
