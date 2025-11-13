@@ -1,170 +1,138 @@
-// 🎬 SinhalaSub (Cinesubz API Integrated v3 - Fully Fixed)
-// by Wasantha X GPT
+// 🎬 SinhalaSub Plugin (Cinesubz API Integration v4 - Full Reply Chain Fixed)
+// 🧠 by Wasantha X GPT
 
-const consoleLog = console.log;
-const config = require('../config');
 const { cmd } = require('../command');
 const axios = require('axios');
 const NodeCache = require('node-cache');
+const config = require('../config');
 
-// Cache setup
 const cache = new NodeCache({ stdTTL: 60, checkperiod: 120 });
-const BRAND = '' + (config.MOVIE_FOOTER || '© SinhalaSub');
-
-// Your API key
+const BRAND = config.MOVIE_FOOTER || '© SinhalaSub';
 const API_KEY = '15d9dcfa502789d3290fd69cb2bdbb9ab919fab5969df73b0ee433206c58e05b';
 
-// Base URLs
-const API_BASE = 'https://foreign-marna-sithaunarathnapromax-9a005c2e.koyeb.app/api/cinesubz';
-const SEARCH_API = `${API_BASE}/search?apiKey=${API_KEY}&q=`;
-const DETAIL_API = `${API_BASE}/movie-details?apiKey=${API_KEY}&url=`;
-const TVSHOW_API = `${API_BASE}/tvshow-details?apiKey=${API_KEY}&url=`;
-const EPISODE_API = `${API_BASE}/episode-details?apiKey=${API_KEY}&url=`;
-const DOWNLOAD_API = `${API_BASE}/downloadurl?apiKey=${API_KEY}&url=`;
+const BASE = 'https://foreign-marna-sithaunarathnapromax-9a005c2e.koyeb.app/api/cinesubz';
+const SEARCH = `${BASE}/search?apiKey=${API_KEY}&q=`;
+const DETAIL = `${BASE}/movie-details?apiKey=${API_KEY}&url=`;
+const TVSHOW = `${BASE}/tvshow-details?apiKey=${API_KEY}&url=`;
+const EPISODE = `${BASE}/episode-details?apiKey=${API_KEY}&url=`;
+const DOWNLOAD = `${BASE}/downloadurl?apiKey=${API_KEY}&url=`;
 
-// Command Registration
 cmd({
   pattern: 'sinhalasub',
   react: '🎬',
-  desc: 'Search and download SinhalaSub Movies / TV Series',
-  category: 'Movie / TV',
+  desc: 'Search SinhalaSub Movies & TV Shows',
+  category: 'movie',
   filename: __filename
-}, async (client, quotedMsg, msg, { from, q }) => {
-
-  const USAGE =
-    '*🎬 SinhalaSub Movie / TV Search*\n\n' +
-    '📋 Usage: .sinhalasub <movie name>\n\n' +
-    '📝 Example: .sinhalasub Breaking Bad\n\n' +
-    '*💡 Type your movie or series name.*';
-
-  if (!q)
-    return client.sendMessage(from, { text: USAGE }, { quoted: quotedMsg });
+}, async (client, m, mek, { from, q }) => {
+  if (!q) {
+    return client.sendMessage(from, {
+      text: `🎬 *SinhalaSub Search*\n\n📌 Usage: .sinhalasub <movie name>\n\nExample:\n.sinhalasub The Boys`
+    }, { quoted: m });
+  }
 
   try {
-    const cacheKey = `cine_${q.toLowerCase()}`;
-    let data = cache.get(cacheKey);
-
-    if (!data) {
-      const res = await axios.get(SEARCH_API + encodeURIComponent(q));
-      data = res.data;
-
-      if (!data || !data.data || !Array.isArray(data.data) || !data.data.length)
-        throw new Error('❌ No results found.');
-
-      cache.set(cacheKey, data);
+    const key = `search_${q.toLowerCase()}`;
+    let result = cache.get(key);
+    if (!result) {
+      const res = await axios.get(SEARCH + encodeURIComponent(q));
+      result = res.data;
+      if (!result || !result.data?.length) throw new Error('❌ No results found.');
+      cache.set(key, result);
     }
 
-    // Map results
-    const results = data.data.slice(0, 10).map((r, i) => ({
-      n: i + 1,
-      title: r.title,
-      year: r.year,
-      link: r.link,
-      imdb: r.rating || 'N/A',
-      image: r.imageSrc,
-      type: r.type
-    }));
+    const items = result.data.slice(0, 10);
+    let caption = `🎬 *SinhalaSub Search Results*\n\n`;
+    for (let i = 0; i < items.length; i++) {
+      caption += `${i + 1}. ${items[i].title} (${items[i].year}) • ⭐ ${items[i].rating || 'N/A'}\n`;
+    }
+    caption += `\n💬 Reply with *number* to view details.\n\n${BRAND}`;
 
-    let caption = `*🎬 SinhalaSub Search Results*\n\n`;
-    results.forEach(r => {
-      caption += `${r.n}. ${r.title} (${r.year}) • ${r.imdb}\n`;
-    });
-    caption += '\n🪀 Reply with *number* to get details.\n\n' + BRAND;
-
-    const sentMsg = await client.sendMessage(from, {
-      image: { url: results[0].image },
+    const sent = await client.sendMessage(from, {
+      image: { url: items[0].imageSrc },
       caption
-    }, { quoted: quotedMsg });
+    }, { quoted: m });
 
+    // Store pending selections
     const pending = new Map();
+    pending.set(sent.key.id, { step: 'search', data: items });
 
-    // ✅ Fixed Handler
-    const handler = async ({ messages }) => {
-      const incoming = messages?.[0];
-      if (!incoming?.message) return;
+    client.ev.on('messages.upsert', async ({ messages }) => {
+      const msg = messages[0];
+      if (!msg.message) return;
 
-      const text =
-        incoming?.message?.conversation?.trim() ||
-        incoming?.message?.extendedTextMessage?.text?.trim();
-      if (!text) return;
+      const body = msg.message.conversation || msg.message.extendedTextMessage?.text;
+      if (!body) return;
 
-      const ctx =
-        incoming?.message?.extendedTextMessage?.contextInfo?.stanzaId ||
-        incoming?.message?.contextInfo?.stanzaId;
+      const ctx = msg.message.extendedTextMessage?.contextInfo?.stanzaId;
+      if (!ctx) return;
 
-      // STEP 1 — Movie / TV Selection
-      if (ctx === sentMsg.key.id) {
-        const sel = parseInt(text, 10);
-        const selected = results.find(r => r.n === sel);
-        if (!selected)
-          return client.sendMessage(from, { text: '❌ Invalid number.' }, { quoted: incoming });
+      const selected = pending.get(ctx);
+      if (!selected) return;
 
-        const isTv = selected.type.includes('TV');
-        const infoURL = (isTv ? TVSHOW_API : DETAIL_API) + encodeURIComponent(selected.link);
+      // --- Step 1: Movie/TV show selected ---
+      if (selected.step === 'search') {
+        const num = parseInt(body.trim());
+        const pick = selected.data[num - 1];
+        if (!pick) return client.sendMessage(from, { text: '❌ Invalid number.' }, { quoted: msg });
 
-        const detailRes = await axios.get(infoURL);
-        const info = detailRes.data;
-        const img = info.thumbnail || selected.image;
+        const isTv = pick.type.includes('TV');
+        const link = encodeURIComponent(pick.link);
+        const infoUrl = isTv ? `${TVSHOW}${link}` : `${DETAIL}${link}`;
+        const info = (await axios.get(infoUrl)).data;
 
-        let caption2 = `🎬 *${info.title || selected.title}*\n\n🗓️ Year: ${info.year}\n⭐ IMDb: ${info.imdb || selected.imdb}\n📄 Type: ${isTv ? 'TV Series' : 'Movie'}\n\n`;
+        let cap = `🎬 *${info.title || pick.title}*\n\n🗓️ Year: ${info.year}\n⭐ IMDb: ${info.imdb || pick.rating}\n📄 Type: ${isTv ? 'TV Series' : 'Movie'}\n\n`;
 
         if (isTv && info.episodes?.length) {
-          caption2 += '*📺 Episodes:*\n';
+          cap += '*📺 Episodes:*\n';
           info.episodes.slice(0, 10).forEach((e, i) => {
-            caption2 += `${i + 1}. ${e.title}\n`;
+            cap += `${i + 1}. ${e.title}\n`;
           });
-          caption2 += '\n🔢 Reply with *episode number* to download.';
+          cap += '\n💬 Reply with episode number to get download links.';
         } else {
-          caption2 += '*📥 Reply "1" to get download links.*';
+          cap += '💬 Reply with "1" to get download links.';
         }
 
-        const msg2 = await client.sendMessage(
-          from,
-          { image: { url: img }, caption: caption2 },
-          { quoted: incoming }
-        );
+        const sent2 = await client.sendMessage(from, {
+          image: { url: info.thumbnail || pick.imageSrc },
+          caption: cap
+        }, { quoted: msg });
 
-        pending.set(msg2.key.id, { info, isTv });
+        pending.set(sent2.key.id, { step: 'detail', info, isTv });
         return;
       }
 
-      // STEP 2 — Episode / Movie Download
-      if (pending.has(ctx)) {
-        const { info, isTv } = pending.get(ctx);
-        const pick = parseInt(text, 10);
+      // --- Step 2: Episode or Movie download ---
+      if (selected.step === 'detail') {
+        const { info, isTv } = selected;
+        const num = parseInt(body.trim());
+        let link = info.download || info.url;
 
-        let downloadURL;
         if (isTv) {
-          const ep = info.episodes[pick - 1];
-          if (!ep)
-            return client.sendMessage(from, { text: '❌ Invalid episode.' }, { quoted: incoming });
-          const epRes = await axios.get(EPISODE_API + encodeURIComponent(ep.url));
-          downloadURL = epRes.data.download || ep.url;
-        } else {
-          downloadURL = info.download || info.url;
+          const ep = info.episodes[num - 1];
+          if (!ep) return client.sendMessage(from, { text: '❌ Invalid episode.' }, { quoted: msg });
+          const epRes = await axios.get(EPISODE + encodeURIComponent(ep.url));
+          link = epRes.data.download || ep.url;
         }
 
-        const downRes = await axios.get(DOWNLOAD_API + encodeURIComponent(downloadURL));
+        const downRes = await axios.get(DOWNLOAD + encodeURIComponent(link));
         const sources = downRes.data.sources || [];
-
         if (!sources.length)
-          return client.sendMessage(from, { text: '❌ No download links found.' }, { quoted: incoming });
+          return client.sendMessage(from, { text: '❌ No download links found.' }, { quoted: msg });
 
-        let caption3 = `🎬 *${info.title}* Download Links:\n\n`;
+        let cap3 = `🎬 *${info.title}* Download Links:\n\n`;
         sources.forEach((s, i) => {
-          caption3 += `${i + 1}. ${s.quality || 'Unknown'} • ${s.size || '?'}\n${s.direct_download}\n\n`;
+          cap3 += `${i + 1}. ${s.quality || 'Unknown'} • ${s.size || '?'}\n${s.direct_download}\n\n`;
         });
-        caption3 += `${BRAND}`;
+        cap3 += `${BRAND}`;
 
-        await client.sendMessage(from, { text: caption3 }, { quoted: incoming });
+        await client.sendMessage(from, { text: cap3 }, { quoted: msg });
       }
-    };
+    });
 
-    // Attach the handler
-    client.ev.on('messages.upsert', handler);
-
-  } catch (e) {
-    consoleLog(e);
-    client.sendMessage(from, { text: '❌ Error: ' + (e.message || e) }, { quoted: quotedMsg });
+  } catch (err) {
+    console.error(err);
+    return client.sendMessage(from, {
+      text: `❌ Error: ${err.message || err}`
+    }, { quoted: m });
   }
 });
