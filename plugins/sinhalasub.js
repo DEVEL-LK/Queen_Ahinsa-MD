@@ -1,4 +1,4 @@
-// 🎬 SinhalaSub Plugin (Advanced) - React & Multi-Quality Download
+// 🎬 SinhalaSub Plugin (Baileys v5 Fully Fixed)
 // 🧠 Developer: Wasantha X GPT
 
 const axios = require('axios');
@@ -65,7 +65,7 @@ module.exports = (conn) => {
     }
   });
 
-  // 🟣 Global Reply Listener
+  // 🟣 Global Reply Listener (Fixed)
   conn.ev.on('messages.upsert', async (meks) => {
     try {
       const mek = meks.messages[0];
@@ -73,14 +73,12 @@ module.exports = (conn) => {
 
       const from = mek.key.remoteJid;
       const session = replySession.get(from);
-      if (!session || !session.msgId) return;
+      if (!session) return;
 
+      // Allow both quoted reply or simple number reply
       const quotedId = mek.message.extendedTextMessage?.contextInfo?.stanzaId;
-      if (!quotedId || quotedId !== session.msgId) return;
-
       const text = mek.message.conversation || mek.message.extendedTextMessage?.text;
       if (!text || !/^\d+$/.test(text)) return;
-
       const num = parseInt(text);
 
       // ---- Step 1: Movie / TV selection ----
@@ -110,7 +108,7 @@ module.exports = (conn) => {
           caption
         }, { quoted: mek });
 
-        // React to the user's reply
+        // React to user's reply
         await conn.sendMessage(from, { react: { text: '🔎', key: sent.key } });
 
         replySession.set(from, {
@@ -135,18 +133,18 @@ module.exports = (conn) => {
         }
 
         const down = await axios.get(DOWNLOAD + encodeURIComponent(link));
-        const src = down.data.sources || [];
+        const src = down.data.sources || down.data.download || [];
         if (!src.length) return conn.sendMessage(from, { text: '❌ No download links found.' });
 
         let cap3 = `🎬 *${info.title}* Download Links:\n\n`;
-        const qualities = ['480p', '720p', '1080p'];
 
+        const qualities = ['480p', '720p', '1080p'];
         qualities.forEach(q => {
           const filtered = src.filter(s => (s.quality || '').includes(q));
           if (filtered.length) {
             cap3 += `*${q}*:\n`;
             filtered.forEach((s, i) => {
-              cap3 += `${i + 1}. ${s.size || '?'} • ${s.direct_download}\n`;
+              cap3 += `${i + 1}. ${s.size || '?'} • ${s.url || s.direct_download}\n`;
             });
             cap3 += '\n';
           }
@@ -155,8 +153,11 @@ module.exports = (conn) => {
         cap3 += BRAND;
 
         await conn.sendMessage(from, { text: cap3 });
+
         // React with download emoji
         await conn.sendMessage(from, { react: { text: '⬇️', key: mek.key } });
+
+        // Clear session
         replySession.delete(from);
       }
 
