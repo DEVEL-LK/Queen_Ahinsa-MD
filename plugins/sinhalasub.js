@@ -1,7 +1,4 @@
-// 🎬 SinhalaSub Plugin (v6 – Fully working in Queen_Ahinsa base)
-// ✅ FIXED reply chain for movies & tvshows
-// 🧠 Developer: Wasantha X GPT
-
+// 🎬 SinhalaSub Plugin v6 – Fully working in Queen_Ahinsa base
 const axios = require('axios');
 const NodeCache = require('node-cache');
 const { cmd } = require('../command');
@@ -18,7 +15,7 @@ const EPISODE = `${BASE}/episode-details?apiKey=${API_KEY}&url=`;
 const DOWNLOAD = `${BASE}/downloadurl?apiKey=${API_KEY}&url=`;
 
 const cache = new NodeCache({ stdTTL: 120 });
-const replySession = new Map(); // Track reply context
+const replySession = new Map();
 
 // 🟢 Main Command
 cmd({
@@ -29,11 +26,7 @@ cmd({
   category: 'movie',
   filename: __filename
 }, async (client, m, mek, { from, q }) => {
-  if (!q) {
-    return m.reply(
-      '🎬 *SinhalaSub Search*\n\n📖 Usage: `.sinhalasub <movie name>`\n💡 Example: `.sinhalasub Breaking Bad`'
-    );
-  }
+  if (!q) return m.reply('🎬 Usage: `.sinhalasub <movie name>`');
 
   try {
     const key = `cine_${q.toLowerCase()}`;
@@ -46,9 +39,7 @@ cmd({
 
     const list = res.data.slice(0, 8);
     let caption = `🎬 *Results for:* ${q}\n\n`;
-    list.forEach((r, i) => {
-      caption += `${i + 1}. ${r.title} (${r.year}) • ⭐ ${r.rating || 'N/A'}\n`;
-    });
+    list.forEach((r, i) => caption += `${i + 1}. ${r.title} (${r.year}) • ⭐ ${r.rating || 'N/A'}\n`);
     caption += `\n💬 Reply with *number* to view details.\n${BRAND}`;
 
     const sent = await client.sendMessage(from, {
@@ -56,19 +47,14 @@ cmd({
       caption
     }, { quoted: m });
 
-    // Save reply context
-    replySession.set(from, {
-      step: 'search',
-      list,
-      msgId: sent.key.id
-    });
+    replySession.set(from, { step: 'search', list, msgId: sent.key.id });
   } catch (err) {
     console.log(err);
     m.reply('❌ Error: ' + err.message);
   }
 });
 
-// 🟣 Global Reply Handler
+// 🟣 Reply Handler
 module.exports = (client) => {
   client.on('message', async (m) => {
     try {
@@ -79,11 +65,11 @@ module.exports = (client) => {
       if (!session || !session.msgId) return;
 
       const quoted = m.quoted?.id || m.message?.extendedTextMessage?.contextInfo?.stanzaId;
-      if (!quoted || quoted !== session.msgId) return; // only reply to bot message
+      if (!quoted || quoted !== session.msgId) return;
 
       const num = parseInt(text);
 
-      // ---- Step 1: Movie / TV selection ----
+      // Step 1: Movie/TV selection
       if (session.step === 'search') {
         const selected = session.list[num - 1];
         if (!selected) return m.reply('❌ Invalid number.');
@@ -97,29 +83,20 @@ module.exports = (client) => {
 
         if (isTv && info.episodes?.length) {
           caption += '*📺 Episodes:*\n';
-          info.episodes.slice(0, 10).forEach((e, i) => {
-            caption += `${i + 1}. ${e.title}\n`;
-          });
+          info.episodes.slice(0, 10).forEach((e, i) => caption += `${i + 1}. ${e.title}\n`);
           caption += '\n💬 Reply with episode number to get download links.';
-        } else {
-          caption += '💬 Reply "1" to get download links.';
-        }
+        } else caption += '💬 Reply "1" to get download links.';
 
         const sent = await client.sendMessage(m.chat, {
           image: { url: info.thumbnail || selected.imageSrc },
           caption
         }, { quoted: m });
 
-        replySession.set(m.chat, {
-          step: 'detail',
-          info,
-          isTv,
-          msgId: sent.key.id
-        });
+        replySession.set(m.chat, { step: 'detail', info, isTv, msgId: sent.key.id });
         return;
       }
 
-      // ---- Step 2: Download ----
+      // Step 2: Download
       if (session.step === 'detail') {
         const { info, isTv } = session;
         let link = info.download || info.url;
@@ -133,18 +110,16 @@ module.exports = (client) => {
 
         const down = await axios.get(DOWNLOAD + encodeURIComponent(link));
         const src = down.data.sources || [];
-
         if (!src.length) return m.reply('❌ No download links found.');
 
         let cap3 = `🎬 *${info.title}* Download Links:\n\n`;
-        src.forEach((s, i) => {
-          cap3 += `${i + 1}. ${s.quality || '?'} • ${s.size || '?'}\n${s.direct_download}\n\n`;
-        });
+        src.forEach((s, i) => cap3 += `${i + 1}. ${s.quality || '?'} • ${s.size || '?'}\n${s.direct_download}\n\n`);
         cap3 += BRAND;
 
         await m.reply(cap3);
         replySession.delete(m.chat);
       }
+
     } catch (err) {
       console.log('Reply Handler Error →', err.message);
     }
