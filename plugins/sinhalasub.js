@@ -1,10 +1,10 @@
-// 🎬 Fixed Cinesubz Command with WhatsApp Document Send
+// 🎬 Cinesubz Movie/TV Command with WhatsApp Document Send
 const axios = require('axios');
 const { cmd } = require('../command');
 const NodeCache = require('node-cache');
 const config = require('../config');
 
-const BRAND = config.MOVIE_FOOTER || '🎬 Cinesubz by KAVI';
+const BRAND = config.MOVIE_FOOTER || '🎬 CHATGPT MOVIE';
 const API_KEY = '15d9dcfa502789d3290fd69cb2bdbb9ab919fab5969df73b0ee433206c58e05b';
 const BASE_URL = 'https://foreign-marna-sithaunarathnapromax-9a005c2e.koyeb.app/api/cinesubz';
 
@@ -33,15 +33,16 @@ cmd({
       const searchUrl = `${BASE_URL}/search?apiKey=${API_KEY}&q=${encodeURIComponent(q)}`;
       const { data } = await axios.get(searchUrl, { timeout: 10000 });
 
-      if (!data || !Array.isArray(data.results) || data.results.length === 0)
-        throw new Error('❌ No movies found.');
+      if (!data || !Array.isArray(data.data) || data.data.length === 0)
+        throw new Error('❌ No movies or TV shows found.');
 
-      searchData = data.results.map(item => ({
+      searchData = data.data.map(item => ({
         title: item.title,
         year: item.year || 'N/A',
-        imdb: item.imdb || 'N/A',
-        image: item.thumbnail || item.image,
-        url: item.url || item.link
+        imdb: item.rating || 'N/A',
+        image: item.imageSrc,
+        url: item.link,
+        type: item.type
       }));
 
       cache.set(cacheKey, searchData);
@@ -57,7 +58,7 @@ cmd({
 
       let caption = `*🍿 Cinesubz Search Results (Page ${p}/${totalPages})*\n\n`;
       results.forEach((r, i) => {
-        caption += `${i + 1}. 🎬 *${r.title}*\n   📅 ${r.year} • ⭐ ${r.imdb}\n\n`;
+        caption += `${i + 1}. ${r.type} 🎬 *${r.title}*\n   📅 ${r.year} • ⭐ ${r.imdb}\n\n`;
       });
       if (p < totalPages) caption += `${results.length + 1}. ➡️ *Next Page*\n\n`;
       caption += '🪀 _Reply with number to select_\n\n' + BRAND;
@@ -95,7 +96,7 @@ cmd({
             return;
           }
 
-          // Pick first link (or you can add quality selection later)
+          // Pick first link (can implement quality select later)
           const chosen = downloadData.links[0];
           const sizeInGB = parseSizeToGB(chosen.size || '0');
 
@@ -123,7 +124,7 @@ cmd({
   }
 });
 
-// Helper: parse size string to GB
+// Helper: parse human-readable size to GB
 function parseSizeToGB(sizeStr) {
   if (!sizeStr) return 0;
   const s = sizeStr.trim().toUpperCase();
