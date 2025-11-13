@@ -1,4 +1,4 @@
-// 🎬 SinhalaSub (Cinesubz API Integrated v2 - Fixed Data Field)
+// 🎬 SinhalaSub (Cinesubz API Integrated v3 - Fully Fixed)
 // by Wasantha X GPT
 
 const consoleLog = console.log;
@@ -9,7 +9,7 @@ const NodeCache = require('node-cache');
 
 // Cache setup
 const cache = new NodeCache({ stdTTL: 60, checkperiod: 120 });
-const BRAND = '' + config.MOVIE_FOOTER;
+const BRAND = '' + (config.MOVIE_FOOTER || '© SinhalaSub');
 
 // Your API key
 const API_KEY = '15d9dcfa502789d3290fd69cb2bdbb9ab919fab5969df73b0ee433206c58e05b';
@@ -69,7 +69,7 @@ cmd({
     results.forEach(r => {
       caption += `${r.n}. ${r.title} (${r.year}) • ${r.imdb}\n`;
     });
-    caption += '\n🪀 Reply with number to get details.\n\n*~https://whatsapp.com/channel/0029Vb5xFPHGE56jTnm4ZD2k~*';
+    caption += '\n🪀 Reply with *number* to get details.\n\n' + BRAND;
 
     const sentMsg = await client.sendMessage(from, {
       image: { url: results[0].image },
@@ -78,16 +78,26 @@ cmd({
 
     const pending = new Map();
 
+    // ✅ Fixed Handler
     const handler = async ({ messages }) => {
       const incoming = messages?.[0];
-      const text = incoming?.message?.conversation?.trim();
+      if (!incoming?.message) return;
+
+      const text =
+        incoming?.message?.conversation?.trim() ||
+        incoming?.message?.extendedTextMessage?.text?.trim();
       if (!text) return;
 
-      // Step 1: Pick movie or tv show
-      if (incoming.message?.contextInfo?.stanzaId === sentMsg.key.id) {
+      const ctx =
+        incoming?.message?.extendedTextMessage?.contextInfo?.stanzaId ||
+        incoming?.message?.contextInfo?.stanzaId;
+
+      // STEP 1 — Movie / TV Selection
+      if (ctx === sentMsg.key.id) {
         const sel = parseInt(text, 10);
         const selected = results.find(r => r.n === sel);
-        if (!selected) return client.sendMessage(from, { text: '❌ Invalid number.' }, { quoted: incoming });
+        if (!selected)
+          return client.sendMessage(from, { text: '❌ Invalid number.' }, { quoted: incoming });
 
         const isTv = selected.type.includes('TV');
         const infoURL = (isTv ? TVSHOW_API : DETAIL_API) + encodeURIComponent(selected.link);
@@ -103,25 +113,31 @@ cmd({
           info.episodes.slice(0, 10).forEach((e, i) => {
             caption2 += `${i + 1}. ${e.title}\n`;
           });
-          caption2 += '\n🔢 Reply with episode number to download.';
+          caption2 += '\n🔢 Reply with *episode number* to download.';
         } else {
           caption2 += '*📥 Reply "1" to get download links.*';
         }
 
-        const msg2 = await client.sendMessage(from, { image: { url: img }, caption: caption2 }, { quoted: incoming });
+        const msg2 = await client.sendMessage(
+          from,
+          { image: { url: img }, caption: caption2 },
+          { quoted: incoming }
+        );
+
         pending.set(msg2.key.id, { info, isTv });
         return;
       }
 
-      // Step 2: Episode or movie download
-      if (pending.has(incoming.message?.contextInfo?.stanzaId)) {
-        const { info, isTv } = pending.get(incoming.message.contextInfo.stanzaId);
+      // STEP 2 — Episode / Movie Download
+      if (pending.has(ctx)) {
+        const { info, isTv } = pending.get(ctx);
         const pick = parseInt(text, 10);
 
         let downloadURL;
         if (isTv) {
           const ep = info.episodes[pick - 1];
-          if (!ep) return client.sendMessage(from, { text: '❌ Invalid episode.' }, { quoted: incoming });
+          if (!ep)
+            return client.sendMessage(from, { text: '❌ Invalid episode.' }, { quoted: incoming });
           const epRes = await axios.get(EPISODE_API + encodeURIComponent(ep.url));
           downloadURL = epRes.data.download || ep.url;
         } else {
@@ -136,7 +152,7 @@ cmd({
 
         let caption3 = `🎬 *${info.title}* Download Links:\n\n`;
         sources.forEach((s, i) => {
-          caption3 += `${i + 1}. ${s.quality} • ${s.size}\n${s.direct_download}\n\n`;
+          caption3 += `${i + 1}. ${s.quality || 'Unknown'} • ${s.size || '?'}\n${s.direct_download}\n\n`;
         });
         caption3 += `${BRAND}`;
 
@@ -144,6 +160,7 @@ cmd({
       }
     };
 
+    // Attach the handler
     client.ev.on('messages.upsert', handler);
 
   } catch (e) {
