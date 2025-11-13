@@ -1,4 +1,4 @@
-// 🎬 Cinesubz Movie / TV Command
+// 🎬 Fixed Cinesubz Command with WhatsApp Document Send
 const axios = require('axios');
 const { cmd } = require('../command');
 const NodeCache = require('node-cache');
@@ -18,8 +18,8 @@ cmd({
   filename: __filename
 }, async (client, quoted, msg, { from, q }) => {
   const usage =
-    '*🎬 Cinesubz Movie Search*\n\n' +
-    '📋 Usage: .cinesubz <movie name>\n\n' +
+    '*🎬 Cinesubz Movie/TV Search*\n\n' +
+    '📋 Usage: .cinesubz <movie or TV show name>\n' +
     '📝 Example: .cinesubz Breaking Bad\n\n' +
     '💡 _Type a movie or TV show name to search_ 🍿';
 
@@ -32,9 +32,18 @@ cmd({
     if (!searchData) {
       const searchUrl = `${BASE_URL}/search?apiKey=${API_KEY}&q=${encodeURIComponent(q)}`;
       const { data } = await axios.get(searchUrl, { timeout: 10000 });
+
       if (!data || !Array.isArray(data.results) || data.results.length === 0)
         throw new Error('❌ No movies found.');
-      searchData = data.results;
+
+      searchData = data.results.map(item => ({
+        title: item.title,
+        year: item.year || 'N/A',
+        imdb: item.imdb || 'N/A',
+        image: item.thumbnail || item.image,
+        url: item.url || item.link
+      }));
+
       cache.set(cacheKey, searchData);
     }
 
@@ -48,13 +57,13 @@ cmd({
 
       let caption = `*🍿 Cinesubz Search Results (Page ${p}/${totalPages})*\n\n`;
       results.forEach((r, i) => {
-        caption += `${i + 1}. 🎬 *${r.title}*\n   📅 ${r.year || 'N/A'} • ⭐ ${r.imdb || 'N/A'}\n\n`;
+        caption += `${i + 1}. 🎬 *${r.title}*\n   📅 ${r.year} • ⭐ ${r.imdb}\n\n`;
       });
       if (p < totalPages) caption += `${results.length + 1}. ➡️ *Next Page*\n\n`;
       caption += '🪀 _Reply with number to select_\n\n' + BRAND;
 
       const sent = await client.sendMessage(from, {
-        image: { url: results[0]?.thumbnail || results[0]?.image },
+        image: { url: results[0]?.image },
         caption
       }, { quoted });
 
@@ -77,58 +86,49 @@ cmd({
             return;
           }
 
-          const detailsUrl = `${BASE_URL}/movie-details?apiKey=${API_KEY}&url=${encodeURIComponent(selected.url || selected.link)}`;
-          const { data: movieDetails } = await axios.get(detailsUrl);
-
-          const downloadUrl = `${BASE_URL}/downloadurl?apiKey=${API_KEY}&url=${encodeURIComponent(selected.url || selected.link)}`;
+          // Download API
+          const downloadUrl = `${BASE_URL}/downloadurl?apiKey=${API_KEY}&url=${encodeURIComponent(selected.url)}`;
           const { data: downloadData } = await axios.get(downloadUrl);
 
-          if (!downloadData || !Array.isArray(downloadData.links)) {
+          if (!downloadData || !Array.isArray(downloadData.links) || downloadData.links.length === 0) {
             await client.sendMessage(from, { text: '❌ No download links.' }, { quoted: incoming });
             return;
           }
 
-          let detailText = `*🎬 ${selected.title}*\n\n`;
-          detailText += `🧩 Type: ${movieDetails.type || 'N/A'}\n`;
-          detailText += `📅 Year: ${movieDetails.year || 'N/A'}\n`;
-          detailText += `⭐ IMDb: ${movieDetails.imdb || 'N/A'}\n\n`;
-          detailText += `📥 *Available Qualities:*\n`;
+          // Pick first link (or you can add quality selection later)
+          const chosen = downloadData.links[0];
+          const sizeInGB = parseSizeToGB(chosen.size || '0');
 
-          downloadData.links.forEach((link, i) => {
-            detailText += `${i + 1}. ${link.quality} • ${link.size}\n`;
-          });
-
-          detailText += '\n🔢 _Reply with number to download_\n\n' + BRAND;
-
-          const pickMsg = await client.sendMessage(from, {
-            image: { url: selected.thumbnail || selected.image },
-            caption: detailText
-          }, { quoted: incoming });
-
-          client.ev.on('messages.upsert', async ({ messages }) => {
-            const reply = messages?.[0];
-            if (!reply?.message?.conversation) return;
-            const t = reply.message.conversation.trim();
-            if (reply.message?.contextInfo?.stanzaId !== pickMsg.key.id) return;
-
-            const idx = parseInt(t);
-            const chosen = downloadData.links[idx - 1];
-            if (!chosen) {
-              await client.sendMessage(from, { text: '❌ Invalid choice.' }, { quoted: reply });
-              return;
-            }
-
+          if (sizeInGB > 2) {
             await client.sendMessage(from, {
-              text: `🎬 *${selected.title}*\n\n📥 Quality: ${chosen.quality}\n💾 Size: ${chosen.size}\n\n🔗 ${chosen.url || chosen.direct}`
-            }, { quoted: reply });
-          });
+              text: `⚠️ File too large for WhatsApp.\nDirect link:\n${chosen.url}`
+            }, { quoted: incoming });
+          } else {
+            await client.sendMessage(from, {
+              document: { url: chosen.url },
+              mimetype: 'video/mp4',
+              fileName: `${selected.title} • ${chosen.quality}.mp4`,
+              caption: `🎬 ${selected.title}\n📥 Quality: ${chosen.quality}\n💾 Size: ${chosen.size}\n\n${BRAND}`
+            }, { quoted: incoming });
+          }
         }
       });
     };
 
     await sendPage(page);
+
   } catch (err) {
     console.error(err);
     await client.sendMessage(from, { text: '❌ Error: ' + (err.message || err) }, { quoted });
   }
 });
+
+// Helper: parse size string to GB
+function parseSizeToGB(sizeStr) {
+  if (!sizeStr) return 0;
+  const s = sizeStr.trim().toUpperCase();
+  if (s.endsWith('GB')) return parseFloat(s.replace('GB', '')) || 0;
+  if (s.endsWith('MB')) return (parseFloat(s.replace('MB', '')) || 0) / 1024;
+  if (s.endsWith('KB')) return (parseFloat(s.replace('KB', '')) || 0) / (1024 * 1024);
+  return parseFloat(s) || 0;
+}
