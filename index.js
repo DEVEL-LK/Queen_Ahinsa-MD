@@ -57,7 +57,7 @@ const config = await readEnv();
 const prefix = ('.')
 //=================================
         
-console.log("𝙲𝚘𝚗𝚗𝚎𝚌𝚝𝚒𝚗𝚐 𝚀𝚞𝚎𝚎𝚗_𝙰𝚑𝚒𝚗𝚜𝚊-𝙼𝙳 💤...");
+console.log("𝙲𝚘𝚗𝚗𝚎𝚌𝚝𝚒𝚗𝚐 𝚀𝚞𝚎𝚎𝚗_𝙰𝚑𝚒𝚗𝚜𝚊-𝙼𝙳 💤");
 const { state, saveCreds } = await useMultiFileAuthState(__dirname + '/auth_info_baileys/')
 var { version } = await fetchLatestBaileysVersion()
 
@@ -77,7 +77,7 @@ if (lastDisconnect.error.output.statusCode !== DisconnectReason.loggedOut) {
 connectToWA()
 }
 } else if (connection === 'open') {
-console.log('𝙿𝚕𝚞𝚐𝚒𝚗 𝙸𝚗𝚜𝚝𝚊𝚕𝚕𝚒𝚗𝚐 🔌... ')
+console.log('𝙿𝚕𝚞𝚐𝚒𝚗 𝙸𝚗𝚜𝚝𝚊𝚕𝚕𝚒𝚗𝚐 🔌...')
 const path = require('path');
 fs.readdirSync("./plugins/").forEach((plugin) => {
 if (path.extname(plugin).toLowerCase() == ".js") {
@@ -87,8 +87,7 @@ require("./plugins/" + plugin);
 console.log('𝙿𝚕𝚞𝚐𝚒𝚗 𝙸𝚗𝚜𝚝𝚊𝚕𝚕𝚎𝚍 𝚂𝚞𝚌𝚌𝚎𝚜𝚜𝚏𝚞𝚕 ✅')
 console.log('𝚀𝚞𝚎𝚎𝚗_𝙰𝚑𝚒𝚗𝚜𝚊-𝙼𝙳 𝙲𝚘𝚗𝚗𝚎𝚌𝚝 𝚆𝚑𝚊𝚝𝚜𝚊𝚙𝚙 ✅')
 
-let up = `
-*𝙷𝚎𝚕𝚕𝚘𝚠 𝙳𝚎𝚊𝚛 ${ownerNumber}*
+let up = `> *𝙷𝚎𝚕𝚕𝚘𝚠 𝙳𝚎𝚊𝚛 ${ownerNumber}*
 
 *✯ 𝙱𝙾𝚃 𝙽𝙰𝙼𝙴 ✯* - 𝚀𝚞𝚎𝚎𝚗_𝙰𝚑𝚒𝚗𝚜𝚊-𝙼𝙳
 *✯ 𝙱𝙾𝚃 𝚂𝙴𝚂𝚂𝙸𝙾𝙽 𝙽𝙰𝙼𝙴 ✯* - 𝚀𝚞𝚎𝚎𝚗_𝙰𝚑𝚒𝚗𝚜𝚊-𝚞𝚒𝚍~
@@ -99,7 +98,7 @@ let up = `
 *✯ 𝚋𝚘𝚝 𝚄𝚙𝚝𝚒𝚖𝚎 ✯* - 
 *✯ 𝙾𝚠𝚗𝚎𝚛 𝙽𝚊𝚖𝚎 ✯* - ✯𝙳𝚒𝚕𝚒𝚜𝚑𝚊 𝙶𝚒𝚖𝚜𝚑𝚊𝚗✯
 
-*☫ 𝙳𝚎𝚟𝚎𝚕𝚘𝚙𝚎𝚍 𝙱𝚢 𝙳𝚒𝚕𝚒𝚜𝚑𝚊𝚃𝚎𝚌𝚑 ㋡ `;
+☫ *𝙳𝚎𝚟𝚎𝚕𝚘𝚙𝚎𝚍 𝙱𝚢 𝙳𝚒𝚕𝚒𝚜𝚑𝚊𝚃𝚎𝚌𝚑* ㋡`;
 conn.sendMessage(ownerNumber + "@s.whatsapp.net", { image: { url: `https://files.catbox.moe/oosy7v.jpg` }, caption: up })
 
 }
