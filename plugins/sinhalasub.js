@@ -1,4 +1,4 @@
-// 🎬 SinhalaSub Plugin - Friendly Version (Links Optional)
+// 🎬 SinhalaSub Plugin - Reply "1" Fully Working
 const axios = require('axios');
 const NodeCache = require('node-cache');
 const { cmd } = require('../command');
@@ -14,23 +14,22 @@ const EPISODE = `${BASE}/episode-details?apiKey=${API_KEY}&url=`;
 const DOWNLOAD = `${BASE}/downloadurl?apiKey=${API_KEY}&url=`;
 
 const cache = new NodeCache({ stdTTL: 120 });
+const replySession = new Map();
 
 module.exports = (conn) => {
 
+  // 🟢 Main Command
   cmd({
     pattern: 'sinhalasub',
     react: '🎬',
     alias: ['cinesubz'],
-    desc: 'Search SinhalaSub Movies or TV Series (Friendly, Direct Links)',
+    desc: 'Search SinhalaSub Movies or TV Series',
     category: 'movie',
     filename: __filename
   }, async (client, m, mek, { from, q }) => {
-    if (!q) return m.reply(
-      '🎬 *SinhalaSub Search*\n\n📖 Usage: `.sinhalasub <movie name>`\n💡 Example: `.sinhalasub Avengers`'
-    );
+    if (!q) return m.reply('🎬 *SinhalaSub Search*\n\nUsage: `.sinhalasub <movie name>`');
 
     try {
-      // 1️⃣ Search
       const key = `cine_${q.toLowerCase()}`;
       let res = cache.get(key);
       if (!res) {
@@ -39,40 +38,101 @@ module.exports = (conn) => {
         cache.set(key, res);
       }
 
-      const selected = res.data[0]; // Pick first result directly
-      const isTv = selected.type.includes('TV');
-      const infoUrl = isTv ? TVSHOW + encodeURIComponent(selected.link) : DETAIL + encodeURIComponent(selected.link);
+      const list = res.data.slice(0, 8);
+      let caption = `🎬 *Results for:* ${q}\n\n`;
+      list.forEach((r, i) => {
+        caption += `${i + 1}. ${r.title} (${r.year}) • ⭐ ${r.rating || 'N/A'}\n`;
+      });
+      caption += `\n💬 Reply with *number* to view details.\n${BRAND}`;
 
-      // 2️⃣ Get details
-      const info = (await axios.get(infoUrl)).data;
+      const sent = await conn.sendMessage(from, {
+        image: { url: list[0].imageSrc },
+        caption
+      }, { quoted: m });
 
-      // Build basic info caption
-      let cap = `🎬 *${info.title || selected.title}*\n\n`;
-      cap += `📅 Year: ${info.year || 'N/A'}\n⭐ IMDb: ${info.imdb || selected.rating}\n📂 Type: ${isTv ? 'TV Series' : 'Movie'}\n\n`;
+      replySession.set(from, {
+        step: 'search',
+        list,
+        msgId: sent.key.id
+      });
 
-      if (isTv && info.episodes?.length) {
-        cap += '*📺 First Episode:* ' + info.episodes[0].title + '\n\n';
+    } catch (err) {
+      console.log(err);
+      m.reply('❌ Error: ' + err.message);
+    }
+  });
+
+  // 🟣 Global Reply Listener
+  conn.ev.on('messages.upsert', async (meks) => {
+    try {
+      const mek = meks.messages[0];
+      if (!mek.message) return;
+
+      const from = mek.key.remoteJid;
+      const session = replySession.get(from);
+      if (!session) return;
+
+      // Get text from user safely
+      const text = mek.message.conversation || mek.message.extendedTextMessage?.text;
+      if (!text || !/^\d+$/.test(text)) return;
+      const num = parseInt(text);
+
+      // ---- Step 1: Search → Details ----
+      if (session.step === 'search') {
+        const selected = session.list[num - 1];
+        if (!selected) return conn.sendMessage(from, { text: '❌ Invalid number.' });
+
+        const isTv = selected.type.includes('TV');
+        const infoUrl = isTv ? TVSHOW + encodeURIComponent(selected.link) : DETAIL + encodeURIComponent(selected.link);
+        const info = (await axios.get(infoUrl)).data;
+
+        let caption = `🎬 *${info.title || selected.title}*\n\n`;
+        caption += `📅 Year: ${info.year || 'N/A'}\n⭐ IMDb: ${info.imdb || selected.rating}\n📂 Type: ${isTv ? 'TV Series' : 'Movie'}\n\n`;
+
+        if (isTv && info.episodes?.length) {
+          caption += '*📺 Episodes:*\n';
+          info.episodes.slice(0, 10).forEach((e, i) => {
+            caption += `${i + 1}. ${e.title}\n`;
+          });
+          caption += '\n💬 Reply with episode number to get download links.';
+        } else {
+          caption += '💬 Reply "1" to get download links.';
+        }
+
+        const sent = await conn.sendMessage(from, {
+          image: { url: info.thumbnail || selected.imageSrc },
+          caption
+        }, { quoted: mek });
+
+        // react to user
+        await conn.sendMessage(from, { react: { text: '🔎', key: sent.key } });
+
+        replySession.set(from, {
+          step: 'detail',
+          info,
+          isTv,
+          msgId: sent.key.id
+        });
+        return;
       }
 
-      // 3️⃣ Get download link (first episode if TV)
-      let downloadLink = info.download || info.url;
-      if (isTv && info.episodes?.length) {
-        const ep = info.episodes[0];
-        const epRes = await axios.get(EPISODE + encodeURIComponent(ep.url));
-        downloadLink = epRes.data?.download || ep.url;
-      }
+      // ---- Step 2: Details → Download ----
+      if (session.step === 'detail') {
+        const { info, isTv } = session;
 
-      // 4️⃣ Fetch download sources safely
-      let src = [];
-      try {
-        const down = await axios.get(DOWNLOAD + encodeURIComponent(downloadLink));
-        src = down.data?.sources || down.data?.download || [];
-      } catch (e) {
-        console.log('Download API error:', e.message);
-      }
+        let link = info.download || info.url;
+        if (isTv) {
+          const ep = info.episodes[num - 1];
+          if (!ep) return conn.sendMessage(from, { text: '❌ Invalid episode.' });
+          const epRes = await axios.get(EPISODE + encodeURIComponent(ep.url));
+          link = epRes.data?.download || ep.url;
+        }
 
-      if (src.length) {
-        cap += '⬇️ *Download Links:*\n\n';
+        const down = await axios.get(DOWNLOAD + encodeURIComponent(link));
+        const src = down.data?.sources || down.data?.download || [];
+        if (!src.length) return conn.sendMessage(from, { text: '❌ No download links available for this movie/episode.' });
+
+        let cap = `🎬 *${info.title}* Download Links:\n\n`;
         ['480p', '720p', '1080p'].forEach(q => {
           const filtered = src.filter(s => (s.quality || '').includes(q));
           if (filtered.length) {
@@ -83,19 +143,17 @@ module.exports = (conn) => {
             cap += '\n';
           }
         });
-      } else {
-        cap += '❌ No download links available for this movie/episode.';
+
+        cap += BRAND;
+
+        const sent = await conn.sendMessage(from, { text: cap });
+        await conn.sendMessage(from, { react: { text: '⬇️', key: sent.key } });
+
+        replySession.delete(from);
       }
 
-      cap += BRAND;
-
-      // 5️⃣ Send message with emoji react
-      const sent = await conn.sendMessage(from, { text: cap });
-      await conn.sendMessage(from, { react: { text: src.length ? '⬇️' : '❌', key: sent.key } });
-
     } catch (err) {
-      console.log('SinhalaSub Error:', err.message);
-      m.reply('❌ Error: ' + err.message);
+      console.log('SinhalaSub Reply Error →', err.message);
     }
   });
 
