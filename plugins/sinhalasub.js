@@ -1,4 +1,4 @@
-// 🎬 SinhalaSub Plugin (Cinesubz API) - Final Version
+// 🎬 SinhalaSub Plugin (Cinesubz API) - Final Fixed Version
 // 🧠 Developer: Wasantha X GPT
 
 const axios = require('axios');
