@@ -1,4 +1,4 @@
-// 🎬 SinhalaSub (Cinesubz API Integrated)
+// 🎬 SinhalaSub (Cinesubz API Integrated v2 - Fixed Data Field)
 // by Wasantha X GPT
 
 const consoleLog = console.log;
@@ -7,14 +7,14 @@ const { cmd } = require('../command');
 const axios = require('axios');
 const NodeCache = require('node-cache');
 
-// cache setup
+// Cache setup
 const cache = new NodeCache({ stdTTL: 60, checkperiod: 120 });
 const BRAND = '' + config.MOVIE_FOOTER;
 
-// your live key
+// Your API key
 const API_KEY = '15d9dcfa502789d3290fd69cb2bdbb9ab919fab5969df73b0ee433206c58e05b';
 
-// endpoints
+// Base URLs
 const API_BASE = 'https://foreign-marna-sithaunarathnapromax-9a005c2e.koyeb.app/api/cinesubz';
 const SEARCH_API = `${API_BASE}/search?apiKey=${API_KEY}&q=`;
 const DETAIL_API = `${API_BASE}/movie-details?apiKey=${API_KEY}&url=`;
@@ -22,7 +22,7 @@ const TVSHOW_API = `${API_BASE}/tvshow-details?apiKey=${API_KEY}&url=`;
 const EPISODE_API = `${API_BASE}/episode-details?apiKey=${API_KEY}&url=`;
 const DOWNLOAD_API = `${API_BASE}/downloadurl?apiKey=${API_KEY}&url=`;
 
-// command
+// Command Registration
 cmd({
   pattern: 'sinhalasub',
   react: '🎬',
@@ -30,37 +30,44 @@ cmd({
   category: 'Movie / TV',
   filename: __filename
 }, async (client, quotedMsg, msg, { from, q }) => {
+
   const USAGE =
     '*🎬 SinhalaSub Movie / TV Search*\n\n' +
     '📋 Usage: .sinhalasub <movie name>\n\n' +
     '📝 Example: .sinhalasub Breaking Bad\n\n' +
     '*💡 Type your movie or series name.*';
 
-  if (!q) return client.sendMessage(from, { text: USAGE }, { quoted: quotedMsg });
+  if (!q)
+    return client.sendMessage(from, { text: USAGE }, { quoted: quotedMsg });
 
   try {
-    const key = `cine_${q.toLowerCase()}`;
-    let data = cache.get(key);
+    const cacheKey = `cine_${q.toLowerCase()}`;
+    let data = cache.get(cacheKey);
 
     if (!data) {
       const res = await axios.get(SEARCH_API + encodeURIComponent(q));
       data = res.data;
-      if (!data || !data.results?.length) throw new Error('❌ No results found.');
-      cache.set(key, data);
+
+      if (!data || !data.data || !Array.isArray(data.data) || !data.data.length)
+        throw new Error('❌ No results found.');
+
+      cache.set(cacheKey, data);
     }
 
-    const results = data.results.slice(0, 10).map((r, i) => ({
+    // Map results
+    const results = data.data.slice(0, 10).map((r, i) => ({
       n: i + 1,
       title: r.title,
       year: r.year,
-      link: r.url,
-      imdb: r.imdb || 'N/A',
-      image: r.image || r.thumbnail
+      link: r.link,
+      imdb: r.rating || 'N/A',
+      image: r.imageSrc,
+      type: r.type
     }));
 
     let caption = `*🎬 SinhalaSub Search Results*\n\n`;
     results.forEach(r => {
-      caption += `${r.n}. ${r.title} (${r.year}) ⭐ ${r.imdb}\n`;
+      caption += `${r.n}. ${r.title} (${r.year}) • ${r.imdb}\n`;
     });
     caption += '\n🪀 Reply with number to get details.\n\n*~https://whatsapp.com/channel/0029Vb5xFPHGE56jTnm4ZD2k~*';
 
@@ -76,23 +83,20 @@ cmd({
       const text = incoming?.message?.conversation?.trim();
       if (!text) return;
 
-      // user selection
+      // Step 1: Pick movie or tv show
       if (incoming.message?.contextInfo?.stanzaId === sentMsg.key.id) {
         const sel = parseInt(text, 10);
         const selected = results.find(r => r.n === sel);
-        if (!selected) {
-          await client.sendMessage(from, { text: '❌ Invalid number.' }, { quoted: incoming });
-          return;
-        }
+        if (!selected) return client.sendMessage(from, { text: '❌ Invalid number.' }, { quoted: incoming });
 
-        // detect if tvshow or movie
-        const isTv = selected.link.includes('/tvseries/') || selected.link.includes('/tvshows/');
+        const isTv = selected.type.includes('TV');
         const infoURL = (isTv ? TVSHOW_API : DETAIL_API) + encodeURIComponent(selected.link);
 
         const detailRes = await axios.get(infoURL);
         const info = detailRes.data;
         const img = info.thumbnail || selected.image;
-        let caption2 = `🎬 *${info.title || selected.title}*\n\n🗓️ Year: ${info.year}\n⭐ IMDb: ${info.imdb}\n📄 Type: ${isTv ? 'TV Series' : 'Movie'}\n\n`;
+
+        let caption2 = `🎬 *${info.title || selected.title}*\n\n🗓️ Year: ${info.year}\n⭐ IMDb: ${info.imdb || selected.imdb}\n📄 Type: ${isTv ? 'TV Series' : 'Movie'}\n\n`;
 
         if (isTv && info.episodes?.length) {
           caption2 += '*📺 Episodes:*\n';
@@ -100,7 +104,7 @@ cmd({
             caption2 += `${i + 1}. ${e.title}\n`;
           });
           caption2 += '\n🔢 Reply with episode number to download.';
-        } else if (info.download) {
+        } else {
           caption2 += '*📥 Reply "1" to get download links.*';
         }
 
@@ -109,30 +113,33 @@ cmd({
         return;
       }
 
-      // handle reply for episode or download
+      // Step 2: Episode or movie download
       if (pending.has(incoming.message?.contextInfo?.stanzaId)) {
         const { info, isTv } = pending.get(incoming.message.contextInfo.stanzaId);
         const pick = parseInt(text, 10);
 
         let downloadURL;
         if (isTv) {
-          const episode = info.episodes[pick - 1];
-          if (!episode) return client.sendMessage(from, { text: '❌ Invalid episode.' }, { quoted: incoming });
-          const epRes = await axios.get(EPISODE_API + encodeURIComponent(episode.url));
-          downloadURL = epRes.data.download || episode.url;
+          const ep = info.episodes[pick - 1];
+          if (!ep) return client.sendMessage(from, { text: '❌ Invalid episode.' }, { quoted: incoming });
+          const epRes = await axios.get(EPISODE_API + encodeURIComponent(ep.url));
+          downloadURL = epRes.data.download || ep.url;
         } else {
           downloadURL = info.download || info.url;
         }
 
         const downRes = await axios.get(DOWNLOAD_API + encodeURIComponent(downloadURL));
         const sources = downRes.data.sources || [];
-        if (!sources.length) return client.sendMessage(from, { text: '❌ No download links.' }, { quoted: incoming });
+
+        if (!sources.length)
+          return client.sendMessage(from, { text: '❌ No download links found.' }, { quoted: incoming });
 
         let caption3 = `🎬 *${info.title}* Download Links:\n\n`;
         sources.forEach((s, i) => {
           caption3 += `${i + 1}. ${s.quality} • ${s.size}\n${s.direct_download}\n\n`;
         });
         caption3 += `${BRAND}`;
+
         await client.sendMessage(from, { text: caption3 }, { quoted: incoming });
       }
     };
