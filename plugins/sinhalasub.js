@@ -1,4 +1,4 @@
-// 🎬 SinhalaSub Plugin (Cinesubz API) - Buttons Version
+// 🎬 SinhalaSub Plugin (Cinesubz API) - Buttons Version (Fully Verified)
 // 🧠 Developer: Wasantha X GPT
 
 const axios = require('axios');
@@ -108,6 +108,12 @@ module.exports = (conn) => {
         if (buttonReply.startsWith('cineselect_')) {
           selectedNumber = parseInt(buttonReply.replace('cineselect_', ''));
         }
+        if (buttonReply.startsWith('ep_')) {
+          selectedNumber = parseInt(buttonReply.replace('ep_', ''));
+        }
+        if (buttonReply.startsWith('dl_')) {
+          selectedNumber = 0; // single movie download
+        }
       }
 
       // Fallback to number reply text
@@ -115,7 +121,7 @@ module.exports = (conn) => {
       if (!selectedNumber && text && /^\d+$/.test(text)) {
         selectedNumber = parseInt(text);
       }
-      if (!selectedNumber) return;
+      if (selectedNumber === null) return;
 
       // ---- Step 1: Movie / TV selection ----
       if (session.step === 'search') {
@@ -167,14 +173,7 @@ module.exports = (conn) => {
         let link = info.download || info.url;
 
         if (isTv) {
-          let epIndex = null;
-          if (buttonReply?.startsWith('ep_')) {
-            epIndex = parseInt(buttonReply.replace('ep_', ''));
-          } else if (/^\d+$/.test(text)) {
-            epIndex = parseInt(text) - 1;
-          }
-          if (epIndex === null) return conn.sendMessage(from, { text: '❌ Invalid episode.' });
-
+          let epIndex = selectedNumber;
           const ep = info.episodes[epIndex];
           if (!ep) return conn.sendMessage(from, { text: '❌ Invalid episode.' });
           const epRes = await axios.get(EPISODE + encodeURIComponent(ep.url));
