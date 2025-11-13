@@ -1,4 +1,4 @@
-// 🎬 SinhalaSub Plugin (Cinesubz API) - Buttons Version (Fully Verified)
+// 🎬 SinhalaSub Plugin (Cinesubz API) - Fully Fixed
 // 🧠 Developer: Wasantha X GPT
 
 const axios = require('axios');
@@ -52,30 +52,25 @@ module.exports = (conn) => {
     }
   });
 
-  // 🟣 Render Search Page with Buttons
+  // 🟣 Render Search Page with Emojis + Pagination
   async function renderSearchPage(from, fullList, page, m) {
     const start = (page - 1) * RESULTS_PER_PAGE;
     const listPage = fullList.slice(start, start + RESULTS_PER_PAGE);
 
     let caption = `🎬 *Results* (Page ${page})\n\n`;
-    const buttons = [];
-
     listPage.forEach((r, i) => {
       caption += `🎬 ${i + 1}. ${r.title} (${r.year}) • ⭐ ${r.rating || 'N/A'}\n`;
-      buttons.push({ buttonId: `cineselect_${i}`, buttonText: { displayText: `${i + 1}` }, type: 1 });
     });
 
     if (fullList.length > start + RESULTS_PER_PAGE) {
-      buttons.push({ buttonId: `cinext_${page + 1}`, buttonText: { displayText: '➡️ Next Page' }, type: 1 });
+      caption += `➡️ ${listPage.length + 1}. Next Page\n`;
     }
 
-    caption += `\n💬 Click button to view details.\n${BRAND}`;
+    caption += `\n💬 Reply with *number* to view details.\n${BRAND}`;
 
     const sent = await conn.sendMessage(from, {
       image: { url: listPage[0].imageSrc },
-      caption,
-      buttons,
-      headerType: 4
+      caption
     }, { quoted: m });
 
     replySession.set(from, {
@@ -97,35 +92,26 @@ module.exports = (conn) => {
       const session = replySession.get(from);
       if (!session || !session.msgId) return;
 
-      // Button payload detection
-      const buttonReply = mek.message?.buttonsResponseMessage?.selectedButtonId;
-      let selectedNumber = null;
-      if (buttonReply) {
-        if (buttonReply.startsWith('cinext_')) {
-          const nextPage = parseInt(buttonReply.replace('cinext_', ''));
+      // 🔹 Baileys v5 reply detection fix
+      const quotedId = mek.message.extendedTextMessage?.contextInfo?.stanzaId
+                     || mek.message.extendedTextMessage?.contextInfo?.id
+                     || mek.key.id;
+      if (!quotedId || quotedId !== session.msgId) return;
+
+      const text = mek.message.conversation || mek.message.extendedTextMessage?.text;
+      if (!text || !/^\d+$/.test(text)) return;
+      const num = parseInt(text);
+
+      // ---- Step 1: Movie / TV selection or Pagination ----
+      if (session.step === 'search') {
+        const isNextPage = num === session.list.length + 1 
+                           && session.fullList.length > session.page * RESULTS_PER_PAGE;
+        if (isNextPage) {
+          const nextPage = (session.page || 1) + 1;
           return renderSearchPage(from, session.fullList, nextPage, mek);
         }
-        if (buttonReply.startsWith('cineselect_')) {
-          selectedNumber = parseInt(buttonReply.replace('cineselect_', ''));
-        }
-        if (buttonReply.startsWith('ep_')) {
-          selectedNumber = parseInt(buttonReply.replace('ep_', ''));
-        }
-        if (buttonReply.startsWith('dl_')) {
-          selectedNumber = 0; // single movie download
-        }
-      }
 
-      // Fallback to number reply text
-      const text = mek.message.conversation || mek.message.extendedTextMessage?.text;
-      if (!selectedNumber && text && /^\d+$/.test(text)) {
-        selectedNumber = parseInt(text);
-      }
-      if (selectedNumber === null) return;
-
-      // ---- Step 1: Movie / TV selection ----
-      if (session.step === 'search') {
-        const selected = session.list[selectedNumber];
+        const selected = session.list[num - 1];
         if (!selected) return conn.sendMessage(from, { text: '❌ Invalid number.' });
 
         const isTv = selected.type.includes('TV');
@@ -138,24 +124,19 @@ module.exports = (conn) => {
         caption += `⭐ *IMDb:* ${info.imdb || selected.rating}\n`;
         caption += `📂 *Type:* ${isTv ? 'TV Series' : 'Movie'}\n\n`;
 
-        const buttons = [];
         if (isTv && info.episodes?.length) {
           caption += '📺 *Episodes:*\n';
           info.episodes.slice(0, 10).forEach((e, i) => {
             caption += `   ${i + 1}. ${e.title}\n`;
-            buttons.push({ buttonId: `ep_${i}`, buttonText: { displayText: `${i + 1}` }, type: 1 });
           });
-          caption += '\n💬 Click episode to get download links.\n';
+          caption += '\n💬 Reply with episode number to get download links.\n';
         } else {
-          buttons.push({ buttonId: 'dl_0', buttonText: { displayText: '📥 Download' }, type: 1 });
-          caption += '💬 Click button to get download links.\n';
+          caption += '💬 Reply "1" to get download links.\n';
         }
 
         const sent = await conn.sendMessage(from, {
           image: { url: info.thumbnail || selected.imageSrc },
-          caption,
-          buttons,
-          headerType: 4
+          caption
         }, { quoted: mek });
 
         replySession.set(from, {
@@ -173,8 +154,7 @@ module.exports = (conn) => {
         let link = info.download || info.url;
 
         if (isTv) {
-          let epIndex = selectedNumber;
-          const ep = info.episodes[epIndex];
+          const ep = info.episodes[num - 1];
           if (!ep) return conn.sendMessage(from, { text: '❌ Invalid episode.' });
           const epRes = await axios.get(EPISODE + encodeURIComponent(ep.url));
           link = epRes.data.download || ep.url;
@@ -195,7 +175,7 @@ module.exports = (conn) => {
       }
 
     } catch (err) {
-      console.log('SinhalaSub Buttons Error →', err.message);
+      console.log('SinhalaSub Reply Error →', err.message);
     }
   });
 
