@@ -1,4 +1,4 @@
-// 🎬 SinhalaSub Plugin (Cinesubz API) - Styled + Emojis + Pagination + Download Quality
+// 🎬 SinhalaSub Plugin (Cinesubz API) - Final Version
 // 🧠 Developer: Wasantha X GPT
 
 const axios = require('axios');
@@ -17,7 +17,6 @@ const DOWNLOAD = `${BASE}/downloadurl?apiKey=${API_KEY}&url=`;
 
 const cache = new NodeCache({ stdTTL: 120 });
 const replySession = new Map();
-
 const RESULTS_PER_PAGE = 20;
 
 module.exports = (conn) => {
@@ -31,7 +30,6 @@ module.exports = (conn) => {
     category: 'movie',
     filename: __filename
   }, async (client, m, mek, { from, q }) => {
-
     if (!q) return m.reply(
       '🎬 *SinhalaSub Search*\n\n📖 Usage: `.sinhalasub <movie name>`\n💡 Example: `.sinhalasub Breaking Bad`'
     );
@@ -94,17 +92,20 @@ module.exports = (conn) => {
       const session = replySession.get(from);
       if (!session || !session.msgId) return;
 
-      const quotedId = mek.message.extendedTextMessage?.contextInfo?.stanzaId;
+      // 🔹 Fix: Baileys v5 reply detection
+      const quotedId = mek.message.extendedTextMessage?.contextInfo?.stanzaId
+                     || mek.message.extendedTextMessage?.contextInfo?.id
+                     || mek.key.id;
       if (!quotedId || quotedId !== session.msgId) return;
 
       const text = mek.message.conversation || mek.message.extendedTextMessage?.text;
       if (!text || !/^\d+$/.test(text)) return;
-
       const num = parseInt(text);
 
       // ---- Step 1: Movie / TV selection or Pagination ----
       if (session.step === 'search') {
-        const isNextPage = num === session.list.length + 1 && session.fullList.length > session.page * RESULTS_PER_PAGE;
+        const isNextPage = num === session.list.length + 1 
+                           && session.fullList.length > session.page * RESULTS_PER_PAGE;
         if (isNextPage) {
           const nextPage = (session.page || 1) + 1;
           return renderSearchPage(from, session.fullList, nextPage, mek);
@@ -114,7 +115,8 @@ module.exports = (conn) => {
         if (!selected) return conn.sendMessage(from, { text: '❌ Invalid number.' });
 
         const isTv = selected.type.includes('TV');
-        const infoUrl = isTv ? TVSHOW + encodeURIComponent(selected.link) : DETAIL + encodeURIComponent(selected.link);
+        const infoUrl = isTv ? TVSHOW + encodeURIComponent(selected.link) 
+                             : DETAIL + encodeURIComponent(selected.link);
         const info = (await axios.get(infoUrl)).data;
 
         let caption = `🎬 *${info.title || selected.title}*\n\n`;
