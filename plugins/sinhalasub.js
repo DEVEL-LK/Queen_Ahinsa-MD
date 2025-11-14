@@ -46,7 +46,8 @@ module.exports = (conn) => {
       waitReply.set(from, {
         step: "select_movie",
         list: data,
-        msgId: sent.key.id
+        msgId: sent.key.id,
+        timestamp: Date.now()
       });
 
     } catch (e) {
@@ -54,25 +55,26 @@ module.exports = (conn) => {
     }
   });
 
-
   // ─────── GLOBAL REPLY DETECTOR ───────────────────────────────────────
   conn.ev.on("messages.upsert", async ({ messages }) => {
     const m = messages[0];
     if (!m.message) return;
 
     const from = m.key.remoteJid;
-    const context = m.message?.extendedTextMessage?.contextInfo?.stanzaId;
     const text = m.message.conversation || m.message.extendedTextMessage?.text;
     if (!text) return;
 
     const selected = waitReply.get(from);
     if (!selected) return;
 
+    // optional timeout: 3 minutes
+    if (Date.now() - selected.timestamp > 3 * 60 * 1000) {
+      waitReply.delete(from);
+      return;
+    }
+
     const num = parseInt(text);
     if (isNaN(num)) return;
-
-    // reply must match the message we sent
-    if (context !== selected.msgId) return;
 
     // ─── STEP 1 : USER SELECTED MOVIE ───────────────────────────────
     if (selected.step === "select_movie") {
@@ -82,11 +84,8 @@ module.exports = (conn) => {
       waitReply.delete(from);
 
       try {
-        // download api uses ?url=
         const dl = await axios.get(`${BASE}/downloadurl?apiKey=${API_KEY}&url=${encodeURIComponent(movie.link)}`, { timeout: 120000 });
-
-        if (!dl.data?.links?.length)
-          return conn.sendMessage(from, { text: "❌ No download links." });
+        if (!dl.data?.links?.length) return conn.sendMessage(from, { text: "❌ No download links." });
 
         let caption = `*🎬 ${movie.title}*\n\nSelect Quality:\n\n`;
         dl.data.links.forEach((l, i) => {
@@ -102,7 +101,8 @@ module.exports = (conn) => {
           step: "select_quality",
           movie,
           links: dl.data.links,
-          msgId: sent2.key.id
+          msgId: sent2.key.id,
+          timestamp: Date.now()
         });
 
         await conn.sendMessage(from, { react: { text: "🍿", key: m.key } });
@@ -121,7 +121,6 @@ module.exports = (conn) => {
 
       const GB = sizeToGB(link.size);
 
-      // Auto handle large file
       if (GB > 2) {
         return conn.sendMessage(from, {
           text: `⚠️ File too large to send via WhatsApp.\nDirect link:\n${link.url}`
