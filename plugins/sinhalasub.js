@@ -1,181 +1,153 @@
-// 🎬 Cinesubz Movie/TV Command (Client Fix Added)
+// plugins/sinhalasub.js
 const axios = require('axios');
-const { cmd } = require('../command');
 const NodeCache = require('node-cache');
-const config = require('../config');
 
-const BRAND = config.MOVIE_FOOTER || '🎬 CHATGPT MOVIE';
+const BRAND = '🎬 CHATGPT MOVIE';
 const API_KEY = '15d9dcfa502789d3290fd69cb2bdbb9ab919fab5969df73b0ee433206c58e05b';
 const BASE_URL = 'https://foreign-marna-sithaunarathnapromax-9a005c2e.koyeb.app/api/cinesubz';
 
-const cache = new NodeCache({ stdTTL: 120 });
+const cache = new NodeCache({ stdTTL: 120, checkperiod: 240 });
+
+// pending replies map
 const pendingReplies = new Map();
 
-module.exports = cmd({
-    pattern: 'cinesubz',
-    react: '🍿',
-    desc: 'Search Movies / TV Series from Cinesubz',
-    category: 'Movie / TV',
-    filename: __filename
-}, async (client, quoted, msg, { from, q }) => {
+module.exports = (conn) => {
 
-    // -----------------------------
-    // MAIN SEARCH COMMAND
-    // -----------------------------
-    if (!q) {
-        return client.sendMessage(from, {
-            text: '*🎬 Cinesubz Search*\n\nUsage: .cinesubz <movie name>'
-        }, { quoted });
-    }
+    const { cmd } = require('../command');
 
-    try {
-        const key = `cine_${q.toLowerCase()}`;
-        let data = cache.get(key);
+    cmd({
+        pattern: 'cinesubz',
+        react: '🍿',
+        desc: 'Search Movies / TV Series from Cinesubz',
+        category: 'Movie / TV',
+        filename: __filename
+    }, async(conn, mek, m, { from, q, quoted }) => {
 
-        if (!data) {
-            const { data: api } = await axios.get(
-                `${BASE_URL}/search?apiKey=${API_KEY}&q=${encodeURIComponent(q)}`
-            );
+        const usage = '*🎬 Cinesubz Movie/TV Search*\n\n' +
+                      '📋 Usage: .cinesubz <movie or TV show name>\n' +
+                      '📝 Example: .cinesubz Breaking Bad\n\n' +
+                      '💡 _Type a movie or TV show name to search_ 🍿';
 
-            if (!api || !api.data || api.data.length === 0)
-                return client.sendMessage(from, { text: "❌ No movies found." }, { quoted });
+        if (!q) return conn.sendMessage(from, { text: usage }, { quoted });
 
-            data = api.data.map(item => ({
-                title: item.title,
-                year: item.year || 'N/A',
-                imdb: item.rating || 'N/A',
-                image: item.imageSrc,
-                url: item.link,
-                type: item.type
-            }));
-
-            cache.set(key, data);
-        }
-
-        const perPage = 20;
-        const totalPages = Math.ceil(data.length / perPage);
-
-        const sendPage = async (page = 1, replyBase = quoted) => {
-            const start = (page - 1) * perPage;
-            const pageItems = data.slice(start, start + perPage);
-
-            let caption = `*🍿 Results (Page ${page}/${totalPages})*\n\n`;
-
-            pageItems.forEach((r, i) => {
-                caption += `${i + 1}. ${r.type} 🎬 *${r.title}*\n   📅 ${r.year} ⭐ ${r.imdb}\n\n`;
-            });
-
-            if (page < totalPages)
-                caption += `${pageItems.length + 1}. ➡️ *Next Page*\n\n`;
-
-            caption += "🪀 Reply with number\n\n" + BRAND;
-
-            const sent = await client.sendMessage(from, {
-                image: { url: pageItems[0].image },
-                caption
-            }, { quoted: replyBase });
-
-            pendingReplies.set(sent.key.id, {
-                type: 'page',
-                page,
-                totalPages,
-                results: pageItems,
-                fullList: data
-            });
-        };
-
-        await sendPage(1);
-
-    } catch (err) {
-        console.log(err);
-        client.sendMessage(from, { text: "❌ Error: " + err.message });
-    }
-
-    // ---------------------------------------------
-    // FIXED REPLY HANDLER — NOW INSIDE COMMAND
-    // ---------------------------------------------
-    client.ev.on('messages.upsert', async (m) => {
         try {
-            const msg2 = m.messages[0];
-            if (!msg2.message) return;
+            const cacheKey = `cine_${q.toLowerCase()}`;
+            let searchData = cache.get(cacheKey);
 
-            const text =
-                msg2.message.conversation ||
-                msg2.message.extendedTextMessage?.text ||
-                '';
+            if (!searchData) {
+                const searchUrl = `${BASE_URL}/search?apiKey=${API_KEY}&q=${encodeURIComponent(q)}`;
+                const { data } = await axios.get(searchUrl, { timeout: 10000 });
 
-            const num = parseInt(text.trim());
-            if (isNaN(num)) return;
+                if (!data || !Array.isArray(data.data) || data.data.length === 0)
+                    throw new Error('❌ No movies or TV shows found.');
 
-            const stanzaId = msg2.message?.extendedTextMessage?.contextInfo?.stanzaId;
-            if (!stanzaId) return;
+                searchData = data.data.map(item => ({
+                    title: item.title,
+                    year: item.year || 'N/A',
+                    imdb: item.rating || 'N/A',
+                    image: item.imageSrc,
+                    url: item.link,
+                    type: item.type
+                }));
 
-            if (!pendingReplies.has(stanzaId)) return;
-
-            const pend = pendingReplies.get(stanzaId);
-            pendingReplies.delete(stanzaId);
-
-            // PAGE HANDLING
-            if (pend.type === "page") {
-                const { page, totalPages, results, fullList } = pend;
-
-                // NEXT PAGE
-                if (num === results.length + 1 && page < totalPages) {
-                    const newStart = page * 20;
-                    const next = fullList.slice(newStart, newStart + 20);
-
-                    let caption = `*🍿 Page ${page + 1}/${totalPages}*\n\n`;
-
-                    next.forEach((r, i) => {
-                        caption += `${i + 1}. ${r.type} 🎬 *${r.title}*\n⭐ ${r.imdb}\n\n`;
-                    });
-
-                    if (page + 1 < totalPages)
-                        caption += `${next.length + 1}. ➡️ Next Page\n\n`;
-
-                    caption += "🪀 Reply with number\n\n" + BRAND;
-
-                    const sent = await client.sendMessage(msg2.key.remoteJid, {
-                        image: { url: next[0].image },
-                        caption
-                    });
-
-                    pendingReplies.set(sent.key.id, {
-                        type: 'page',
-                        page: page + 1,
-                        totalPages,
-                        results: next,
-                        fullList
-                    });
-
-                    return;
-                }
-
-                // USER SELECTS MOVIE
-                const item = results[num - 1];
-                if (!item)
-                    return client.sendMessage(msg2.key.remoteJid, { text: "❌ Invalid number" });
-
-                const { data: dl } = await axios.get(
-                    `${BASE_URL}/downloadurl?apiKey=${API_KEY}&url=${encodeURIComponent(item.url)}`
-                );
-
-                if (!dl || !dl.links || dl.links.length === 0)
-                    return client.sendMessage(msg2.key.remoteJid, { text: "❌ No download links" });
-
-                const file = dl.links[0];
-
-                await client.sendMessage(msg2.key.remoteJid, {
-                    document: { url: file.url },
-                    mimetype: "video/mp4",
-                    fileName: `${item.title} • ${file.quality}.mp4`,
-                    caption: `🎬 ${item.title}\n⭐ ${file.quality}\n💾 ${file.size}`
-                }, { quoted: msg2 });
+                cache.set(cacheKey, searchData);
             }
 
-        } catch (e) {
-            console.log("Reply Error:", e);
+            await sendPage(conn, from, searchData, 1, quoted);
+
+        } catch (err) {
+            console.error(err);
+            conn.sendMessage(from, { text: '❌ Error: ' + (err.message || err) }, { quoted });
         }
     });
 
-});
+    // sendPage function
+    async function sendPage(conn, from, data, page = 1, quoted) {
+        const perPage = 20;
+        const totalPages = Math.ceil(data.length / perPage);
+        const start = (page - 1) * perPage;
+        const results = data.slice(start, start + perPage);
+
+        let caption = `*🍿 Cinesubz Search Results (Page ${page}/${totalPages})*\n\n`;
+        results.forEach((r, i) => {
+            caption += `${i + 1}. ${r.type} 🎬 *${r.title}*\n   📅 ${r.year} • ⭐ ${r.imdb}\n\n`;
+        });
+        if (page < totalPages) caption += `${results.length + 1}. ➡️ *Next Page*\n\n`;
+        caption += '🪀 _Reply with number to select_\n\n' + BRAND;
+
+        const sent = await conn.sendMessage(from, {
+            image: { url: results[0]?.image },
+            caption
+        }, { quoted });
+
+        pendingReplies.set(sent.key.id, { type: 'page', results, page, from });
+    }
+
+    // reply handler
+    conn.ev.on('messages.upsert', async({ messages }) => {
+        const incoming = messages[0];
+        if (!incoming?.message?.conversation) return;
+
+        const textRaw = incoming.message.conversation.trim();
+        const text = parseInt(textRaw.replace(/\D/g, ''));
+        if (isNaN(text)) return;
+
+        const stanzaId = incoming.message?.contextInfo?.stanzaId;
+        if (!stanzaId) return;
+
+        if (!pendingReplies.has(stanzaId)) return;
+        const pending = pendingReplies.get(stanzaId);
+
+        if (pending.type === 'page') {
+            const { results, page, from } = pending;
+
+            const perPage = 20;
+            const totalPages = Math.ceil(results.length / perPage);
+
+            // next page
+            if (text === results.length + 1 && page < totalPages) {
+                pendingReplies.delete(stanzaId);
+                await sendPage(conn, from, results, page + 1, incoming);
+                return;
+            }
+
+            const selected = results[text - 1];
+            if (!selected) return conn.sendMessage(from, { text: '❌ Invalid number.' }, { quoted: incoming });
+
+            pendingReplies.delete(stanzaId);
+
+            // fetch download links
+            const downloadUrl = `${BASE_URL}/downloadurl?apiKey=${API_KEY}&url=${encodeURIComponent(selected.url)}`;
+            const { data: downloadData } = await axios.get(downloadUrl);
+
+            if (!downloadData || !Array.isArray(downloadData.links) || downloadData.links.length === 0)
+                return conn.sendMessage(from, { text: '❌ No download links.' }, { quoted: incoming });
+
+            const chosen = downloadData.links[0];
+            const sizeInGB = parseSizeToGB(chosen.size || '0');
+
+            if (sizeInGB > 2) {
+                conn.sendMessage(from, {
+                    text: `⚠️ File too large for WhatsApp.\nDirect link:\n${chosen.url}`
+                }, { quoted: incoming });
+            } else {
+                conn.sendMessage(from, {
+                    document: { url: chosen.url },
+                    mimetype: 'video/mp4',
+                    fileName: `${selected.title} • ${chosen.quality}.mp4`,
+                    caption: `🎬 ${selected.title}\n📥 Quality: ${chosen.quality}\n💾 Size: ${chosen.size}\n\n${BRAND}`
+                }, { quoted: incoming });
+            }
+        }
+    });
+
+    function parseSizeToGB(sizeStr) {
+        if (!sizeStr) return 0;
+        const s = sizeStr.trim().toUpperCase();
+        if (s.endsWith('GB')) return parseFloat(s.replace('GB', '')) || 0;
+        if (s.endsWith('MB')) return (parseFloat(s.replace('MB', '')) || 0) / 1024;
+        if (s.endsWith('KB')) return (parseFloat(s.replace('KB', '')) || 0) / (1024 * 1024);
+        return parseFloat(s) || 0;
+    }
+
+};
