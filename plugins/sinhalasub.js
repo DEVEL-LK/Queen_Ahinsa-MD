@@ -1,32 +1,32 @@
-// 🎬 SinhalaSub Plugin for Queen_Ahinsa-MD
 const axios = require('axios');
 const NodeCache = require('node-cache');
+const { cmd } = require('../command');
 
-module.exports = (client) => {
-  const API_KEY = '15d9dcfa502789d3290fd69cb2bdbb9ab919fab5969df73b0ee433206c58e05b';
-  const BASE_URL = 'https://foreign-marna-sithaunarathnapromax-9a005c2e.koyeb.app/api/cinesubz';
-  const BRAND = '🎬 CHATGPT MOVIE';
-  const cache = new NodeCache({ stdTTL: 120, checkperiod: 240 });
+const API_KEY = '15d9dcfa502789d3290fd69cb2bdbb9ab919fab5969df73b0ee433206c58e05b';
+const BASE_URL = 'https://foreign-marna-sithaunarathnapromax-9a005c2e.koyeb.app/api/cinesubz';
+const BRAND = '🎬 CHATGPT MOVIE';
+
+module.exports = (conn) => {
+  const cache = new NodeCache({ stdTTL: 120 });
   const pendingReplies = new Map();
 
-  // Register command
-  const { cmd } = require('../command');
   cmd({
     pattern: 'cinesubz',
     react: '🍿',
     desc: 'Search Movies / TV Series from Cinesubz',
     category: 'Movie / TV',
     filename: __filename
-  }, async (conn, mek, m, { from, q, quoted }) => {
-    if (!q) return conn.sendMessage(from, { text: '*Usage:* .cinesubz <movie name>' }, { quoted });
+  }, async (client, quoted, msg, { from, q }) => {
+    if (!q) return client.sendMessage(from, { text: 'Usage: .cinesubz <movie name>' }, { quoted: msg });
 
     try {
       const cacheKey = `cine_${q.toLowerCase()}`;
       let searchData = cache.get(cacheKey);
 
       if (!searchData) {
-        const { data } = await axios.get(`${BASE_URL}/search?apiKey=${API_KEY}&q=${encodeURIComponent(q)}`);
-        if (!data || !Array.isArray(data.data) || data.data.length === 0) throw new Error('❌ No movies found.');
+        const { data } = await axios.get(`${BASE_URL}/search?apiKey=${API_KEY}&q=${encodeURIComponent(q)}`, { timeout: 10000 });
+        if (!data || !Array.isArray(data.data) || !data.data.length)
+          throw new Error('❌ No movies or TV shows found.');
 
         searchData = data.data.map(item => ({
           title: item.title,
@@ -39,95 +39,63 @@ module.exports = (client) => {
         cache.set(cacheKey, searchData);
       }
 
-      const sendPage = async (page = 1) => {
-        const perPage = 20;
-        const totalPages = Math.ceil(searchData.length / perPage);
-        const start = (page - 1) * perPage;
-        const results = searchData.slice(start, start + perPage);
+      let caption = '*🍿 Cinesubz Search Results*\n\n';
+      searchData.forEach((r, i) => {
+        caption += `${i + 1}. ${r.type} 🎬 *${r.title}*\n   📅 ${r.year} • ⭐ ${r.imdb}\n\n`;
+      });
+      caption += '🪀 Reply with the number to select\n\n' + BRAND;
 
-        let caption = `*🍿 Cinesubz Search Results (Page ${page}/${totalPages})*\n\n`;
-        results.forEach((r, i) => {
-          caption += `${i + 1}. ${r.type} 🎬 *${r.title}*\n   📅 ${r.year} • ⭐ ${r.imdb}\n\n`;
-        });
-        if (page < totalPages) caption += `${results.length + 1}. ➡️ *Next Page*\n\n`;
-        caption += '🪀 _Reply with number to select_\n\n' + BRAND;
+      const sent = await client.sendMessage(from, { image: { url: searchData[0]?.image }, caption }, { quoted: msg });
 
-        const sent = await conn.sendMessage(from, { image: { url: results[0]?.image }, caption }, { quoted });
-        pendingReplies.set(sent.key.id, { type: 'page', results, page });
-      };
-
-      await sendPage();
+      // Store pending selection
+      pendingReplies.set(from, { results: searchData });
 
     } catch (err) {
       console.error(err);
-      await conn.sendMessage(from, { text: '❌ Error: ' + (err.message || err) }, { quoted });
+      client.sendMessage(from, { text: '❌ Error: ' + (err.message || err) }, { quoted: msg });
     }
   });
 
-  // Handle number reply
-  client.ev.on('messages.upsert', async ({ messages }) => {
-    const incoming = messages[0];
-    if (!incoming?.message?.conversation) return;
+  conn.ev.on('messages.upsert', async ({ messages }) => {
+    const mek = messages[0];
+    if (!mek.message || mek.key.remoteJid === 'status@broadcast') return;
 
-    const textRaw = incoming.message.conversation.trim();
+    const from = mek.key.remoteJid;
+    const pending = pendingReplies.get(from);
+    if (!pending) return;
+
+    const textRaw = mek.message.conversation || (mek.message.extendedTextMessage?.text || '');
     const text = parseInt(textRaw.replace(/\D/g, ''));
     if (isNaN(text)) return;
 
-    const stanzaId = incoming.key.id;
-    if (!pendingReplies.has(stanzaId)) return;
-
-    const pending = pendingReplies.get(stanzaId);
-    if (pending.type !== 'page') return;
-
-    const { results, page } = pending;
-    const perPage = 20;
-    const totalPages = Math.ceil(results.length / perPage);
-
-    // Next page
-    if (text === results.length + 1 && page < totalPages) {
-      pendingReplies.delete(stanzaId);
-      const startIndex = page * perPage;
-      const nextResults = results.slice(startIndex, startIndex + perPage);
-      if (nextResults.length > 0) {
-        let caption = `*🍿 Cinesubz Search Results (Page ${page + 1}/${totalPages})*\n\n`;
-        nextResults.forEach((r, i) => {
-          caption += `${i + 1}. ${r.type} 🎬 *${r.title}*\n   📅 ${r.year} • ⭐ ${r.imdb}\n\n`;
-        });
-        if (page + 1 < totalPages) caption += `${nextResults.length + 1}. ➡️ *Next Page*\n\n`;
-        caption += '🪀 _Reply with number to select_\n\n' + BRAND;
-
-        const sent = await client.sendMessage(incoming.key.remoteJid, { image: { url: nextResults[0]?.image }, caption }, { quoted: incoming });
-        pendingReplies.set(sent.key.id, { type: 'page', results: nextResults, page: page + 1 });
-      }
-      return;
+    const selected = pending.results[text - 1];
+    if (!selected) {
+      return conn.sendMessage(from, { text: '❌ Invalid number.' }, { quoted: mek });
     }
 
-    // Selected movie
-    const selected = results[text - 1];
-    if (!selected) return conn.sendMessage(incoming.key.remoteJid, { text: '❌ Invalid number.' }, { quoted: incoming });
-    pendingReplies.delete(stanzaId);
+    pendingReplies.delete(from);
 
     try {
       const { data: downloadData } = await axios.get(`${BASE_URL}/downloadurl?apiKey=${API_KEY}&url=${encodeURIComponent(selected.url)}`);
-      if (!downloadData || !Array.isArray(downloadData.links) || downloadData.links.length === 0) return conn.sendMessage(incoming.key.remoteJid, { text: '❌ No download links.' }, { quoted: incoming });
+      if (!downloadData || !Array.isArray(downloadData.links) || !downloadData.links.length)
+        return conn.sendMessage(from, { text: '❌ No download links.' }, { quoted: mek });
 
       const chosen = downloadData.links[0];
-      const sizeInGB = parseSizeToGB(chosen.size || '0');
+      const sizeGB = parseSizeToGB(chosen.size);
 
-      if (sizeInGB > 2) {
-        await conn.sendMessage(incoming.key.remoteJid, { text: `⚠️ File too large for WhatsApp.\nDirect link:\n${chosen.url}` }, { quoted: incoming });
+      if (sizeGB > 2) {
+        await conn.sendMessage(from, { text: `⚠️ File too large for WhatsApp.\nDirect link:\n${chosen.url}` }, { quoted: mek });
       } else {
-        await conn.sendMessage(incoming.key.remoteJid, {
+        await conn.sendMessage(from, {
           document: { url: chosen.url },
           mimetype: 'video/mp4',
           fileName: `${selected.title} • ${chosen.quality}.mp4`,
           caption: `🎬 ${selected.title}\n📥 Quality: ${chosen.quality}\n💾 Size: ${chosen.size}\n\n${BRAND}`
-        }, { quoted: incoming });
+        }, { quoted: mek });
       }
-
-    } catch (e) {
-      console.error(e);
-      conn.sendMessage(incoming.key.remoteJid, { text: '❌ Failed to fetch download link.' }, { quoted: incoming });
+    } catch (err) {
+      console.error(err);
+      conn.sendMessage(from, { text: '❌ Download failed: ' + (err.message || err) }, { quoted: mek });
     }
   });
 
