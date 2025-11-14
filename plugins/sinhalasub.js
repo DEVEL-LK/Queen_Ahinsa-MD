@@ -9,6 +9,7 @@ module.exports = (conn) => {
   const cache = new NodeCache({ stdTTL: 180 });
   const waitReply = new Map();
 
+  // ─────── SEARCH COMMAND ───────────────────────────────
   cmd({
     pattern: "cinesubz",
     desc: "Search Movies / TV",
@@ -34,7 +35,6 @@ module.exports = (conn) => {
       caption += `Reply with a number`;
 
       const sent = await client.sendMessage(from, { image: { url: data[0].imageSrc }, caption }, { quoted: msg });
-
       waitReply.set(from, { step: "select_movie", list: data, msgId: sent.key.id, timestamp: Date.now() });
 
     } catch (e) {
@@ -42,9 +42,11 @@ module.exports = (conn) => {
     }
   });
 
+  // ─────── REPLY HANDLER ───────────────────────────────
   conn.ev.on("messages.upsert", async ({ messages }) => {
     const m = messages[0];
     if (!m.message) return;
+
     const from = m.key.remoteJid;
     const text = m.message.conversation || m.message.extendedTextMessage?.text;
     if (!text) return;
@@ -56,7 +58,7 @@ module.exports = (conn) => {
     const num = parseInt(text);
     if (isNaN(num)) return;
 
-    // ─── USER SELECTED MOVIE
+    // ─── USER SELECTED MOVIE ─────────────────────────────
     if (selected.step === "select_movie") {
       const movie = selected.list[num - 1];
       if (!movie) return conn.sendMessage(from, { text: "❌ Invalid number" });
@@ -64,14 +66,14 @@ module.exports = (conn) => {
 
       try {
         const dl = await axios.get(`${BASE}/downloadurl?apiKey=${API_KEY}&url=${encodeURIComponent(movie.link)}`, { timeout: 120000 });
-        
-        // 🔹 Handle single object or array
+
+        // 🔹 Single object / array safe handling
         let links = dl.data?.links || dl.data?.data?.links || [];
         if (!Array.isArray(links) && dl.data?.url) links = [dl.data];
         if (!links.length) return conn.sendMessage(from, { text: "❌ No download links." });
 
         let caption = `*🎬 ${movie.title}*\n\nSelect Quality:\n\n`;
-        links.forEach((l, i) => caption += `${i + 1}. *${l.quality}* - ${l.size}\n\n`);
+        links.forEach((l, i) => caption += `${i + 1}. *${l.quality || "Default"}* - ${l.size || "Unknown"}\n\n`);
 
         const sent2 = await conn.sendMessage(from, { image: { url: movie.imageSrc }, caption }, { quoted: m });
         waitReply.set(from, { step: "select_quality", movie, links, msgId: sent2.key.id, timestamp: Date.now() });
@@ -83,7 +85,7 @@ module.exports = (conn) => {
       }
     }
 
-    // ─── USER SELECTED QUALITY
+    // ─── USER SELECTED QUALITY ───────────────────────────
     else if (selected.step === "select_quality") {
       const link = selected.links[num - 1];
       if (!link) return conn.sendMessage(from, { text: "❌ Invalid number" });
@@ -93,7 +95,12 @@ module.exports = (conn) => {
       if (GB > 2) return conn.sendMessage(from, { text: `⚠️ File too large to send via WhatsApp.\nDirect link:\n${link.url}` });
 
       try {
-        await conn.sendMessage(from, { document: { url: link.url }, mimetype: "video/mp4", fileName: `${selected.movie.title} ${link.quality}.mp4`, caption: `🎬 ${selected.movie.title}\nQuality: ${link.quality}\nSize: ${link.size}` });
+        await conn.sendMessage(from, {
+          document: { url: link.url },
+          mimetype: "video/mp4",
+          fileName: `${selected.movie.title} ${link.quality || "HD"}.mp4`,
+          caption: `🎬 ${selected.movie.title}\nQuality: ${link.quality || "HD"}\nSize: ${link.size || "Unknown"}`
+        });
         await conn.sendMessage(from, { react: { text: "✅", key: m.key } });
       } catch (err) {
         conn.sendMessage(from, { text: `❌ Failed to send.\nDirect link:\n${link.url}` });
@@ -102,6 +109,7 @@ module.exports = (conn) => {
   });
 };
 
+// ─────── SIZE PARSER ───────────────────────────────
 function sizeToGB(str) {
   if (!str) return 0;
   let s = str.toUpperCase();
