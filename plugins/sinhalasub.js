@@ -25,7 +25,7 @@ module.exports = (conn) => {
       let data = cache.get(key);
 
       if (!data) {
-        const r = await axios.get(`${BASE}/search?apiKey=${API_KEY}&q=${encodeURIComponent(q)}`);
+        const r = await axios.get(`${BASE}/search?apiKey=${API_KEY}&q=${encodeURIComponent(q)}`, { timeout: 120000 });
         if (!r.data?.data?.length) throw new Error("❌ No movies found");
 
         data = r.data.data;
@@ -83,7 +83,7 @@ module.exports = (conn) => {
 
       try {
         // download api uses ?url=
-        const dl = await axios.get(`${BASE}/downloadurl?apiKey=${API_KEY}&url=${encodeURIComponent(movie.link)}`);
+        const dl = await axios.get(`${BASE}/downloadurl?apiKey=${API_KEY}&url=${encodeURIComponent(movie.link)}`, { timeout: 120000 });
 
         if (!dl.data?.links?.length)
           return conn.sendMessage(from, { text: "❌ No download links." });
@@ -121,9 +121,10 @@ module.exports = (conn) => {
 
       const GB = sizeToGB(link.size);
 
+      // Auto handle large file
       if (GB > 2) {
         return conn.sendMessage(from, {
-          text: `⚠️ File too large.\nDirect link:\n${link.url}`
+          text: `⚠️ File too large to send via WhatsApp.\nDirect link:\n${link.url}`
         });
       }
 
