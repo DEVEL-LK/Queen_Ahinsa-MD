@@ -56,6 +56,7 @@ module.exports = (conn) => {
     }
   });
 
+  // Listen for number reply
   conn.ev.on('messages.upsert', async ({ messages }) => {
     const mek = messages[0];
     if (!mek.message || mek.key.remoteJid === 'status@broadcast') return;
@@ -71,6 +72,13 @@ module.exports = (conn) => {
     const selected = pending.results[text - 1];
     if (!selected) {
       return conn.sendMessage(from, { text: '❌ Invalid number.' }, { quoted: mek });
+    }
+
+    // ✅ Emoji reaction when number is selected
+    try {
+      await conn.sendMessage(from, { react: { text: '🍿', key: mek.key } });
+    } catch (e) {
+      console.error('Reaction failed:', e);
     }
 
     pendingReplies.delete(from);
