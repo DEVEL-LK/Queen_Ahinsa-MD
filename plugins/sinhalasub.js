@@ -1,12 +1,4 @@
-// 🎬 Cinesubz Movie/TV Command (100% Working for Queen-Ahinsa MD)
-// Features:
-// ✔ Movie/TV Search
-// ✔ Number Reply Selection
-// ✔ Next Page System
-// ✔ WhatsApp Document Download
-// ✔ Auto Fix for Baileys v5 Reply Handler
-// ----------------------------------------------------
-
+// 🎬 Cinesubz Movie/TV Command (Client Fix Added)
 const axios = require('axios');
 const { cmd } = require('../command');
 const NodeCache = require('node-cache');
@@ -19,20 +11,20 @@ const BASE_URL = 'https://foreign-marna-sithaunarathnapromax-9a005c2e.koyeb.app/
 const cache = new NodeCache({ stdTTL: 120 });
 const pendingReplies = new Map();
 
-// --------------------------------------
-// MAIN COMMAND
-// --------------------------------------
-cmd({
+module.exports = cmd({
     pattern: 'cinesubz',
     react: '🍿',
-    desc: 'Search Movies/TV from Cinesubz',
+    desc: 'Search Movies / TV Series from Cinesubz',
     category: 'Movie / TV',
     filename: __filename
 }, async (client, quoted, msg, { from, q }) => {
 
+    // -----------------------------
+    // MAIN SEARCH COMMAND
+    // -----------------------------
     if (!q) {
         return client.sendMessage(from, {
-            text: '*🎬 Cinesubz Search*\n\nUsage: .cinesubz <movie name>\nExample: .cinesubz Breaking Bad'
+            text: '*🎬 Cinesubz Search*\n\nUsage: .cinesubz <movie name>'
         }, { quoted });
     }
 
@@ -60,24 +52,23 @@ cmd({
             cache.set(key, data);
         }
 
-        // Paginate -----------------
         const perPage = 20;
         const totalPages = Math.ceil(data.length / perPage);
 
-        const showPage = async (page = 1, replyBase = quoted) => {
+        const sendPage = async (page = 1, replyBase = quoted) => {
             const start = (page - 1) * perPage;
             const pageItems = data.slice(start, start + perPage);
 
-            let caption = `*🍿 Cinesubz Results (Page ${page}/${totalPages})*\n\n`;
+            let caption = `*🍿 Results (Page ${page}/${totalPages})*\n\n`;
 
             pageItems.forEach((r, i) => {
-                caption += `${i + 1}. ${r.type} 🎬 *${r.title}*\n   📅 ${r.year} • ⭐ ${r.imdb}\n\n`;
+                caption += `${i + 1}. ${r.type} 🎬 *${r.title}*\n   📅 ${r.year} ⭐ ${r.imdb}\n\n`;
             });
 
             if (page < totalPages)
                 caption += `${pageItems.length + 1}. ➡️ *Next Page*\n\n`;
 
-            caption += '🪀 Reply with number to select\n\n' + BRAND;
+            caption += "🪀 Reply with number\n\n" + BRAND;
 
             const sent = await client.sendMessage(from, {
                 image: { url: pageItems[0].image },
@@ -85,116 +76,106 @@ cmd({
             }, { quoted: replyBase });
 
             pendingReplies.set(sent.key.id, {
-                type: "page",
+                type: 'page',
                 page,
                 totalPages,
                 results: pageItems,
-                fullResults: data
+                fullList: data
             });
         };
 
-        await showPage(1);
+        await sendPage(1);
 
     } catch (err) {
         console.log(err);
         client.sendMessage(from, { text: "❌ Error: " + err.message });
     }
-});
 
-// --------------------------------------
-// 100% WORKING REPLY HANDLER FOR QUEEN AHINSA
-// --------------------------------------
-client.ev.on('messages.upsert', async (m) => {
-    try {
-        const msg = m.messages[0];
-        if (!msg.message) return;
+    // ---------------------------------------------
+    // FIXED REPLY HANDLER — NOW INSIDE COMMAND
+    // ---------------------------------------------
+    client.ev.on('messages.upsert', async (m) => {
+        try {
+            const msg2 = m.messages[0];
+            if (!msg2.message) return;
 
-        const text =
-            msg.message.conversation ||
-            msg.message.extendedTextMessage?.text ||
-            '';
+            const text =
+                msg2.message.conversation ||
+                msg2.message.extendedTextMessage?.text ||
+                '';
 
-        if (!text) return;
+            const num = parseInt(text.trim());
+            if (isNaN(num)) return;
 
-        const num = parseInt(text.trim());
-        if (isNaN(num)) return;
+            const stanzaId = msg2.message?.extendedTextMessage?.contextInfo?.stanzaId;
+            if (!stanzaId) return;
 
-        const stanzaId = msg.message?.extendedTextMessage?.contextInfo?.stanzaId;
-        if (!stanzaId) return;
+            if (!pendingReplies.has(stanzaId)) return;
 
-        if (!pendingReplies.has(stanzaId)) return;
+            const pend = pendingReplies.get(stanzaId);
+            pendingReplies.delete(stanzaId);
 
-        const pend = pendingReplies.get(stanzaId);
-        pendingReplies.delete(stanzaId);
+            // PAGE HANDLING
+            if (pend.type === "page") {
+                const { page, totalPages, results, fullList } = pend;
 
-        // -------------------------------
-        // PAGE SYSTEM
-        // -------------------------------
-        if (pend.type === "page") {
-            const { page, totalPages, results, fullResults } = pend;
+                // NEXT PAGE
+                if (num === results.length + 1 && page < totalPages) {
+                    const newStart = page * 20;
+                    const next = fullList.slice(newStart, newStart + 20);
 
-            // If user selects "Next Page"
-            if (num === results.length + 1 && page < totalPages) {
+                    let caption = `*🍿 Page ${page + 1}/${totalPages}*\n\n`;
 
-                const newStart = page * 20;
-                const next = fullResults.slice(newStart, newStart + 20);
+                    next.forEach((r, i) => {
+                        caption += `${i + 1}. ${r.type} 🎬 *${r.title}*\n⭐ ${r.imdb}\n\n`;
+                    });
 
-                let cap = `*🍿 Cinesubz Results (Page ${page + 1}/${totalPages})*\n\n`;
+                    if (page + 1 < totalPages)
+                        caption += `${next.length + 1}. ➡️ Next Page\n\n`;
 
-                next.forEach((r, i) => {
-                    cap += `${i + 1}. ${r.type} 🎬 *${r.title}*\n   📅 ${r.year} • ⭐ ${r.imdb}\n\n`;
-                });
+                    caption += "🪀 Reply with number\n\n" + BRAND;
 
-                if (page + 1 < totalPages)
-                    cap += `${next.length + 1}. ➡️ *Next Page*\n\n`;
+                    const sent = await client.sendMessage(msg2.key.remoteJid, {
+                        image: { url: next[0].image },
+                        caption
+                    });
 
-                cap += '🪀 Reply with number to select\n\n' + BRAND;
+                    pendingReplies.set(sent.key.id, {
+                        type: 'page',
+                        page: page + 1,
+                        totalPages,
+                        results: next,
+                        fullList
+                    });
 
-                const sent = await client.sendMessage(msg.key.remoteJid, {
-                    image: { url: next[0].image },
-                    caption: cap
-                });
+                    return;
+                }
 
-                pendingReplies.set(sent.key.id, {
-                    type: "page",
-                    page: page + 1,
-                    totalPages,
-                    results: next,
-                    fullResults
-                });
+                // USER SELECTS MOVIE
+                const item = results[num - 1];
+                if (!item)
+                    return client.sendMessage(msg2.key.remoteJid, { text: "❌ Invalid number" });
 
-                return;
+                const { data: dl } = await axios.get(
+                    `${BASE_URL}/downloadurl?apiKey=${API_KEY}&url=${encodeURIComponent(item.url)}`
+                );
+
+                if (!dl || !dl.links || dl.links.length === 0)
+                    return client.sendMessage(msg2.key.remoteJid, { text: "❌ No download links" });
+
+                const file = dl.links[0];
+
+                await client.sendMessage(msg2.key.remoteJid, {
+                    document: { url: file.url },
+                    mimetype: "video/mp4",
+                    fileName: `${item.title} • ${file.quality}.mp4`,
+                    caption: `🎬 ${item.title}\n⭐ ${file.quality}\n💾 ${file.size}`
+                }, { quoted: msg2 });
             }
 
-            const selected = results[num - 1];
-            if (!selected)
-                return client.sendMessage(msg.key.remoteJid, { text: "❌ Invalid number!" }, { quoted: msg });
-
-            // -------------------------------
-            // FETCH DOWNLOAD LINK
-            // -------------------------------
-            const { data: dl } = await axios.get(
-                `${BASE_URL}/downloadurl?apiKey=${API_KEY}&url=${encodeURIComponent(selected.url)}`
-            );
-
-            if (!dl || !dl.links || dl.links.length === 0)
-                return client.sendMessage(msg.key.remoteJid, { text: "❌ No download links!" }, { quoted: msg });
-
-            const file = dl.links[0];
-
-            // -------------------------------
-            // SEND AS DOCUMENT
-            // -------------------------------
-            await client.sendMessage(msg.key.remoteJid, {
-                document: { url: file.url },
-                mimetype: "video/mp4",
-                fileName: `${selected.title} • ${file.quality}.mp4`,
-                caption: `🎬 ${selected.title}\n📥 ${file.quality}\n💾 ${file.size}\n\n${BRAND}`
-            }, { quoted: msg });
-
+        } catch (e) {
+            console.log("Reply Error:", e);
         }
+    });
 
-    } catch (e) {
-        console.log("Reply Handler Error:", e);
-    }
 });
