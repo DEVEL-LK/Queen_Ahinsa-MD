@@ -2,7 +2,7 @@ const axios = require("axios");
 const NodeCache = require("node-cache");
 const { cmd } = require("../command");
 
-const API_KEY = "15d9dcfa502789d3290fd69cb2bdbb9ab919fab5969df73b0ee433206c58e05b";
+const API_KEY = "25f974dba76310042bcd3c9488eec9093816ef32eb36d34c1b6b875ac9215932";
 const BASE = "https://foreign-marna-sithaunarathnapromax-9a005c2e.koyeb.app/api/cinesubz";
 
 module.exports = (conn) => {
