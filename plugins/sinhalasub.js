@@ -85,10 +85,13 @@ module.exports = (conn) => {
 
       try {
         const dl = await axios.get(`${BASE}/downloadurl?apiKey=${API_KEY}&url=${encodeURIComponent(movie.link)}`, { timeout: 120000 });
-        if (!dl.data?.links?.length) return conn.sendMessage(from, { text: "❌ No download links." });
+
+        // 🔹 Safe fallback for links
+        const links = dl.data?.links || dl.data?.data?.links || [];
+        if (!links.length) return conn.sendMessage(from, { text: "❌ No download links." });
 
         let caption = `*🎬 ${movie.title}*\n\nSelect Quality:\n\n`;
-        dl.data.links.forEach((l, i) => {
+        links.forEach((l, i) => {
           caption += `${i + 1}. *${l.quality}* - ${l.size}\n\n`;
         });
 
@@ -100,7 +103,7 @@ module.exports = (conn) => {
         waitReply.set(from, {
           step: "select_quality",
           movie,
-          links: dl.data.links,
+          links,
           msgId: sent2.key.id,
           timestamp: Date.now()
         });
@@ -144,9 +147,7 @@ module.exports = (conn) => {
       }
     }
   });
-
 };
-
 
 // ─────── SIZE PARSER ─────────────────────────────────────────────────
 function sizeToGB(str) {
