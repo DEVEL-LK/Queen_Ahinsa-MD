@@ -19,12 +19,20 @@ module.exports = (conn) => {
   }, async (client, quoted, msg, { from, q }) => {
     if (!q) return client.sendMessage(from, { text: "Usage: .cineru <movie name>" }, { quoted: msg });
 
+    console.log("Search query:", q);
+
     try {
       const key = "cine_" + q.toLowerCase();
       let data = cache.get(key);
 
       if (!data) {
-        const r = await axios.get(`${BASE}/search?apiKey=${API_KEY}&query=${encodeURIComponent(q)}`, { timeout: 120000 });
+        const r = await axios.get(`${BASE}/search`, {
+          params: { apiKey: API_KEY, query: q },
+          timeout: 120000
+        });
+
+        console.log("API Response:", r.data);
+
         if (!r.data?.data?.length) throw new Error("❌ No movies found");
         data = r.data.data;
         cache.set(key, data);
@@ -38,6 +46,7 @@ module.exports = (conn) => {
       waitReply.set(from, { step: "select_movie", list: data, timestamp: Date.now() });
 
     } catch (e) {
+      console.error("Search Error:", e.message);
       return client.sendMessage(from, { text: "❌ Error: " + e.message }, { quoted: msg });
     }
   });
@@ -64,18 +73,22 @@ module.exports = (conn) => {
       waitReply.delete(from);
 
       try {
-        const dl = await axios.get(`${BASE}/movie?apiKey=${API_KEY}&id=${movie.id}`, { timeout: 120000 });
-        const links = dl.data?.sources || [];
+        const dl = await axios.get(`${BASE}/movie`, {
+          params: { apiKey: API_KEY, id: movie.id },
+          timeout: 120000
+        });
 
+        console.log("Movie Detail Response:", dl.data);
+
+        const links = dl.data?.sources || [];
         if (!links.length) return conn.sendMessage(from, { text: "❌ No download links found." });
 
-        // Send each link as document if ≤ 2GB
         for (const l of links) {
           const sizeGB = sizeToGB(l.size);
           if (sizeGB > 2) {
             await conn.sendMessage(from, { text: `⚠️ File too large to send via WhatsApp:\n${l.url}` });
           } else {
-            await conn.sendMessage(from, {
+            await client.sendMessage(from, {
               document: { url: l.url },
               mimetype: "video/mp4",
               fileName: `${movie.title} ${l.quality || "HD"}.mp4`,
@@ -85,6 +98,7 @@ module.exports = (conn) => {
         }
 
       } catch (err) {
+        console.error("Download Error:", err.message);
         conn.sendMessage(from, { text: "❌ Error: " + err.message });
       }
     }
