@@ -33,7 +33,7 @@ cmd({
     let searchResponse = searchCache.get(cacheKey);
 
     if (!searchResponse) {
-      const requestUrl = searchUrlBase + encodeURIComponent(q) + '&apiKey=c56182a993f60b4f49cf97ab09886d17';
+      const requestUrl = searchUrlBase + encodeURIComponent(q) + 'https://sadaslk-apis.vercel.app/api/v1/movie/sinhalasub/search?q=2024&apiKey=c56182a993f60b4f49cf97ab09886d17';
       let attempts = 3;
       while (attempts--) {
         try {
