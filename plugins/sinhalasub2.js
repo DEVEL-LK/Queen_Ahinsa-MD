@@ -1,3 +1,10 @@
+const consoleLog = console.log;
+const config = require('../config');
+const { cmd } = require('../command');
+const axios = require('axios');
+const NodeCache = require('node-cache');
+
+
 // … (ආරම්භයේ)
 const searchCache = new NodeCache({ stdTTL: 60, checkperiod: 120 });
 const BRAND = '' + config.MOVIE_FOOTER;
