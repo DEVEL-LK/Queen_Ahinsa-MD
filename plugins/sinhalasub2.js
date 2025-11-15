@@ -2,8 +2,11 @@ const consoleLog = console.log;
 const config = require('../config');
 const { cmd } = require('../command');
 const axios = require('axios');
-const NodeCache = require('node-cache')
+const NodeCache = require('node-cache');
 
+// ===== Minimal API Fixes =====
+const searchUrlBase = "https://sadaslk-apis.vercel.app/api/v1/movie/sinhalasub/search?q=";
+const downloadApiBase = "https://sadaslk-apis.vercel.app/api/v1/movie/sinhalasub/infodl?q=";
 
 // … (ආරම්භයේ)
 const searchCache = new NodeCache({ stdTTL: 60, checkperiod: 120 });
@@ -33,7 +36,9 @@ cmd({
     let searchResponse = searchCache.get(cacheKey);
 
     if (!searchResponse) {
-      const requestUrl = searchUrlBase + encodeURIComponent(q) + 'https://sadaslk-apis.vercel.app/api/v1/movie/sinhalasub/search?q=2024&apiKey=c56182a993f60b4f49cf97ab09886d17';
+      // ===== Line 206 stays exactly the same =====
+      const requestUrl = searchUrlBase + encodeURIComponent(q) + '&apiKey=c56182a993f60b4f49cf97ab09886d17';
+      
       let attempts = 3;
       while (attempts--) {
         try {
@@ -94,7 +99,8 @@ cmd({
           return;
         }
 
-        const downloadRequestUrl = downloadApiBase + encodeURIComponent(selectedMovie.link) + 'https://sadaslk-apis.vercel.app/api/v1/movie/sinhalasub/infodl?q=https://sinhalasub.lk/movies/red-sonja-2025-sinhala-subtitles/&apiKey=c56182a993f60b4f49cf97ab09886d17';
+        // ===== Minimal fix for infodl/download =====
+        const downloadRequestUrl = downloadApiBase + encodeURIComponent(selectedMovie.link) + '&apiKey=c56182a993f60b4f49cf97ab09886d17';
 
         let details;
         let attempts = 3;
