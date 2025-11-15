@@ -94,7 +94,7 @@ cmd({
           return;
         }
 
-        const downloadRequestUrl = downloadApiBase + encodeURIComponent(selectedMovie.link) + '&apiKey=c56182a993f60b4f49cf97ab09886d17';
+        const downloadRequestUrl = downloadApiBase + encodeURIComponent(selectedMovie.link) + 'https://sadaslk-apis.vercel.app/api/v1/movie/sinhalasub/infodl?q=https://sinhalasub.lk/movies/red-sonja-2025-sinhala-subtitles/&apiKey=c56182a993f60b4f49cf97ab09886d17';
 
         let details;
         let attempts = 3;
