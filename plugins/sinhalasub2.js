@@ -5,10 +5,10 @@ const axios = require('axios');
 const NodeCache = require('node-cache');
 
 // ===== Minimal API Fixes =====
+// searchUrlBase + downloadApiBase added to avoid ReferenceError
 const searchUrlBase = "https://sadaslk-apis.vercel.app/api/v1/movie/sinhalasub/search?q=";
 const downloadApiBase = "https://sadaslk-apis.vercel.app/api/v1/movie/sinhalasub/infodl?q=";
 
-// … (ආරම්භයේ)
 const searchCache = new NodeCache({ stdTTL: 60, checkperiod: 120 });
 const BRAND = '' + config.MOVIE_FOOTER;
 
@@ -20,10 +20,11 @@ cmd({
   category: 'Movie',
   filename: __filename
 }, async (client, quotedMsg, msg, { from, q }) => {
+
   const USAGE_TEXT =
     '*🎬 Movie / TV Series Search*\n\n' +
     '📋 Usage: .sinhalasub <search term>\n\n' +
-    '📝 Example: .sinhalasub Breaking Bad\n\n' +
+    '📝 Example: .sinhalasub Avengers\n\n' +
     '*💡 Type Your Movie ㋡*';
 
   if (!q) {
@@ -36,9 +37,9 @@ cmd({
     let searchResponse = searchCache.get(cacheKey);
 
     if (!searchResponse) {
-      // ===== Line 206 stays exactly the same structurally =====
+      // ===== Line 206 minimal fix =====
       const requestUrl = searchUrlBase + encodeURIComponent(q) + '&apiKey=c56182a993f60b4f49cf97ab09886d17';
-      
+
       let attempts = 3;
       while (attempts--) {
         try {
@@ -50,9 +51,11 @@ cmd({
           await new Promise(r => setTimeout(r, 1000));
         }
       }
+
       if (!searchResponse || !searchResponse.results || !Array.isArray(searchResponse.results) || searchResponse.results.length === 0) {
         throw new Error('❌ No results found.');
       }
+
       searchCache.set(cacheKey, searchResponse);
     }
 
@@ -210,3 +213,24 @@ function parseSizeToGB(sizeStr) {
     return isNaN(num) ? 0 : num;
   }
 }
+
+/*
+===== TEST GUIDE =====
+
+1️⃣ Working search examples:
+.sinhalasub Avengers
+.sinhalasub Breaking Bad
+.sinhalasub Spider-Man
+
+2️⃣ Nonexistent search (returns “No results found”):
+.sinhalasub NonexistentMovie123
+
+3️⃣ API check (manual test):
+https://sadaslk-apis.vercel.app/api/v1/movie/sinhalasub/search?q=Avengers&apiKey=c56182a993f60b4f49cf97ab09886d17
+- Response should contain 'results' array
+
+4️⃣ Notes:
+- Query must match API database movies/series
+- If API is down / key expired → all searches fail
+- Infodl/download API works only with valid 'link' from search results
+*/
