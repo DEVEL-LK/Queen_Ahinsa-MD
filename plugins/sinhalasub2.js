@@ -16,7 +16,6 @@ cmd({
     category: 'Movie / TV',
     filename: __filename
 }, async (client, quotedMsg, msg, { from, q }) => {
-
     const USAGE_TEXT = '*🎬 Movie / TV Series Search*\n\n' +
         '📋 Usage: .sinhalasub <search term>\n\n' +
         '📝 Example: .sinhalasub Breaking Bad\n\n' +
@@ -47,12 +46,12 @@ cmd({
             year: item.Year || item.year,
             link: item.Link,
             image: item.Img,
-            imdb: item.Rating || 'N/A'
+            rating: item.Rating || 'N/A'
         }));
 
         let caption = '*🎬 SEARCH RESULTS*\n\n';
         results.forEach(r => {
-            caption += `${r.n}. • ${r.title} *•* ${r.imdb} • Year: ${r.year}\n\n`;
+            caption += `${r.n}. • ${r.title} *•* ${r.rating} • Year: ${r.year}\n\n`;
         });
         caption += '🔢 Reply with number to get info/download 🪀\n\n*~' + BRAND + '*';
 
@@ -61,6 +60,7 @@ cmd({
             caption
         }, { quoted: quotedMsg });
 
+        // Map to track pending selections
         const pendingMap = new Map();
         pendingMap.set(sentListMsg.key.id, results);
 
@@ -76,7 +76,8 @@ cmd({
                 return;
             }
 
-            const replyToId = incoming.message?.contextInfo?.stanzaId;
+            // Reply to search result
+            const replyToId = incoming.message?.contextInfo?.stanzaId || incoming.message?.contextInfo?.quotedMessage?.key?.id;
             if (replyToId && pendingMap.has(replyToId)) {
                 const resultsList = pendingMap.get(replyToId);
                 const selectedIndex = parseInt(text, 10);
@@ -87,7 +88,7 @@ cmd({
                     return;
                 }
 
-                // Fetch movie info & download links
+                // Fetch info + download links
                 const downloadRequestUrl = downloadApiBase + encodeURIComponent(selectedMovie.link) + '&apiKey=c56182a993f60b4f49cf97ab09886d17';
                 const res = await axios.get(downloadRequestUrl, { timeout: 10000 });
                 const details = res.data.data;
@@ -119,7 +120,7 @@ cmd({
                 return;
             }
 
-            // Handle quality selection reply
+            // Quality selection reply
             const pickReplyId = incoming.message?.contextInfo?.stanzaId;
             if (pickReplyId && pendingMap.has(pickReplyId)) {
                 const { film, picks } = pendingMap.get(pickReplyId);
