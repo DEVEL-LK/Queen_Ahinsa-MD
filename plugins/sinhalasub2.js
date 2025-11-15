@@ -36,7 +36,7 @@ cmd({
     let searchResponse = searchCache.get(cacheKey);
 
     if (!searchResponse) {
-      // ===== Line 206 stays exactly the same =====
+      // ===== Line 206 stays exactly the same structurally =====
       const requestUrl = searchUrlBase + encodeURIComponent(q) + '&apiKey=c56182a993f60b4f49cf97ab09886d17';
       
       let attempts = 3;
@@ -50,7 +50,7 @@ cmd({
           await new Promise(r => setTimeout(r, 1000));
         }
       }
-      if (!searchResponse || !searchResponse.results || !Array.isArray(searchResponse.results)) {
+      if (!searchResponse || !searchResponse.results || !Array.isArray(searchResponse.results) || searchResponse.results.length === 0) {
         throw new Error('❌ No results found.');
       }
       searchCache.set(cacheKey, searchResponse);
