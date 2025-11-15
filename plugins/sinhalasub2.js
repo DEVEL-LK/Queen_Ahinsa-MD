@@ -33,17 +33,8 @@ cmd({
 
         if (!searchResponse) {
             const requestUrl = searchUrlBase + encodeURIComponent(q) + '&apiKey=c56182a993f60b4f49cf97ab09886d17';
-            let attempts = 3;
-            while (attempts--) {
-                try {
-                    const apiRes = await axios.get(requestUrl, { timeout: 10000 });
-                    searchResponse = apiRes.data;
-                    break;
-                } catch (err) {
-                    if (!attempts) throw new Error('❌ Fetch failed.');
-                    await new Promise(r => setTimeout(r, 1000));
-                }
-            }
+            const res = await axios.get(requestUrl, { timeout: 10000 });
+            searchResponse = res.data;
             if (!searchResponse || !searchResponse.data || !Array.isArray(searchResponse.data)) {
                 throw new Error('❌ No results found.');
             }
@@ -63,7 +54,7 @@ cmd({
         results.forEach(r => {
             caption += `${r.n}. • ${r.title} *•* ${r.imdb} • Year: ${r.year}\n\n`;
         });
-        caption += '🔢 Select number 🪀\n\n*~' + BRAND + '*';
+        caption += '🔢 Reply with number to get info/download 🪀\n\n*~' + BRAND + '*';
 
         const sentListMsg = await client.sendMessage(from, {
             image: { url: results[0].image },
@@ -71,12 +62,13 @@ cmd({
         }, { quoted: quotedMsg });
 
         const pendingMap = new Map();
+        pendingMap.set(sentListMsg.key.id, results);
 
         const handleUpsert = async ({ messages }) => {
             const incoming = messages?.[0];
             if (!incoming || !incoming.message || !incoming.message.conversation) return;
-
             const text = (incoming.message.conversation || '').trim();
+
             if (text === '0') {
                 client.ev.removeListener('messages.upsert', handleUpsert);
                 pendingMap.clear();
@@ -84,55 +76,42 @@ cmd({
                 return;
             }
 
-            if (incoming.message?.contextInfo?.stanzaId === sentListMsg.key.id) {
+            const replyToId = incoming.message?.contextInfo?.stanzaId;
+            if (replyToId && pendingMap.has(replyToId)) {
+                const resultsList = pendingMap.get(replyToId);
                 const selectedIndex = parseInt(text, 10);
-                const selectedMovie = results.find(r => r.n === selectedIndex);
+                const selectedMovie = resultsList.find(r => r.n === selectedIndex);
 
                 if (!selectedMovie) {
                     await client.sendMessage(from, { text: '❌ Invalid number.' }, { quoted: incoming });
                     return;
                 }
 
+                // Fetch movie info & download links
                 const downloadRequestUrl = downloadApiBase + encodeURIComponent(selectedMovie.link) + '&apiKey=c56182a993f60b4f49cf97ab09886d17';
+                const res = await axios.get(downloadRequestUrl, { timeout: 10000 });
+                const details = res.data.data;
 
-                let details;
-                let attempts = 3;
-                while (attempts--) {
-                    try {
-                        const res = await axios.get(downloadRequestUrl, { timeout: 10000 });
-                        details = res.data;
-                        if (!details || !details.data) throw new Error();
-                        break;
-                    } catch (err) {
-                        if (!attempts) {
-                            await client.sendMessage(from, { text: '❌ Fetch failed.' }, { quoted: incoming });
-                            return;
-                        }
-                        await new Promise(r => setTimeout(r, 1000));
-                    }
+                if (!details) {
+                    await client.sendMessage(from, { text: '❌ Failed to fetch info.' }, { quoted: incoming });
+                    return;
                 }
 
-                const sources = details.data.downloadLinks || [];
+                const sources = details.downloadLinks || [];
                 const sdPick = sources.find(s => s.quality.includes('480'));
                 const hdPick = sources.find(s => s.quality.includes('720') || s.quality.includes('1080'));
-
                 const picks = [];
                 if (sdPick) picks.push({ n: 1, q: 'SD', size: sdPick.size, direct: sdPick.link, qualityLabel: sdPick.quality });
                 if (hdPick) picks.push({ n: 2, q: 'HD', size: hdPick.size, direct: hdPick.link, qualityLabel: hdPick.quality });
 
-                if (!picks.length) {
-                    await client.sendMessage(from, { text: '❌ No links.' }, { quoted: incoming });
-                    return;
-                }
-
-                let pickCaption = `*🎬 ${selectedMovie.title}*\n\n📥 Choose Quality:\n\n`;
+                let pickCaption = `*🎬 ${details.title}*\n\n📥 Choose Quality:\n\n`;
                 picks.forEach(p => {
                     pickCaption += `${p.n}. *${p.q}* (${p.qualityLabel}) - (${p.size})\n`;
                 });
                 pickCaption += '\n*~' + BRAND + '*';
 
                 const sentPicksMsg = await client.sendMessage(from, {
-                    image: { url: details.data.images?.[0] || selectedMovie.image },
+                    image: { url: details.images?.[0] || selectedMovie.image },
                     caption: pickCaption
                 }, { quoted: incoming });
 
@@ -140,19 +119,18 @@ cmd({
                 return;
             }
 
-            if (pendingMap.has(incoming.message?.contextInfo?.stanzaId)) {
-                const contextId = incoming.message.contextInfo.stanzaId;
-                const { film, picks } = pendingMap.get(contextId);
+            // Handle quality selection reply
+            const pickReplyId = incoming.message?.contextInfo?.stanzaId;
+            if (pickReplyId && pendingMap.has(pickReplyId)) {
+                const { film, picks } = pendingMap.get(pickReplyId);
                 const pickNumber = parseInt(text, 10);
                 const chosen = picks.find(p => p.n === pickNumber);
-
                 if (!chosen) {
                     await client.sendMessage(from, { text: '❌ Wrong quality.' }, { quoted: incoming });
                     return;
                 }
 
                 const sizeInGB = parseSizeToGB(chosen.size || '');
-
                 if (sizeInGB > 2) {
                     await client.sendMessage(from, { text: `⚠️ Too large. Direct link:\n${chosen.direct}` }, { quoted: incoming });
                     return;
